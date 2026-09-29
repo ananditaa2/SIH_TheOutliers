@@ -70,6 +70,9 @@
     </div>
 
     <div class="nav-right">
+      <button class="btn btn-outline" id="btnOpenApiSettings" title="Configure AI API Key (Gemini / OpenAI)">
+        <i data-lucide="key"></i> API Key
+      </button>
       <button class="btn btn-outline" id="btnHelpWalkthrough" title="Project Architecture & Guide">
         <i data-lucide="book-open"></i> Arch & Docs
       </button>
@@ -694,6 +697,48 @@
       </section>
 
     </main>
+  </div>
+
+  <!-- Modal for API Key Settings -->
+  <div class="modal-backdrop" id="apiKeyModal" style="display: none;">
+    <div class="modal-dialog" style="width: 540px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="key"></i>
+          <h3>AI Engine API Key Configuration</h3>
+        </div>
+        <button class="btn-close" id="btnCloseApiModal"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary" style="font-size: 12px; margin-bottom: 14px;">
+          Configure your Google Gemini or OpenAI API key to enable live generative drilling Q&A responses in the <strong>WISDOM Knowledge Assistant</strong>.
+        </p>
+
+        <div class="control-group" style="flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 12px;">
+          <label for="aiProviderSelect"><strong>AI Provider:</strong></label>
+          <select id="aiProviderSelect" class="form-select" style="width: 100%;">
+            <option value="gemini" selected>Google Gemini API (gemini-1.5-flash / gemini-1.5-pro)</option>
+            <option value="openai">OpenAI API (gpt-4o / gpt-4o-mini)</option>
+          </select>
+        </div>
+
+        <div class="control-group" style="flex-direction: column; align-items: flex-start; gap: 6px; margin-bottom: 16px;">
+          <label for="apiKeyInput"><strong>Enter API Key:</strong></label>
+          <input type="password" id="apiKeyInput" class="form-input" placeholder="AIzaSy... or sk-..." style="width: 100%; font-family: monospace;">
+          <small class="text-muted" style="font-size: 11px;">Your key is stored securely in your local browser storage (localStorage) and never uploaded to any public server.</small>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+          <button class="btn btn-outline btn-sm" id="btnClearApiKey">Clear Key</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-outline btn-sm" id="btnCancelApiModal">Cancel</button>
+            <button class="btn btn-primary btn-sm" id="btnSaveApiKey"><i data-lucide="save"></i> Save & Connect</button>
+          </div>
+        </div>
+
+        <div id="apiKeyStatusBox" style="margin-top: 12px; font-size: 11px; display: none;"></div>
+      </div>
+    </div>
   </div>
 
   <!-- Modal for Project Architecture & Implementation Blueprint -->

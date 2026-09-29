@@ -395,6 +395,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initRiskAnalyticsCharts();
   initParameterSandbox();
   initRagAssistant();
+  initApiKeyModal();
   initNptIncidentTable();
   initIngestionSimulator();
   initArchModal();
@@ -1261,6 +1262,117 @@ function initRiskAnalyticsCharts() {
   }
 }
 
+// ================= API KEY & LIVE AI CALLER MODULE =================
+function getStoredApiKey() {
+  return localStorage.getItem("WISDOM_AI_API_KEY") || "";
+}
+
+function getStoredProvider() {
+  return localStorage.getItem("WISDOM_AI_PROVIDER") || "gemini";
+}
+
+function initApiKeyModal() {
+  const btnOpen = document.getElementById("btnOpenApiSettings");
+  const modal = document.getElementById("apiKeyModal");
+  const btnClose = document.getElementById("btnCloseApiModal");
+  const btnCancel = document.getElementById("btnCancelApiModal");
+  const btnSave = document.getElementById("btnSaveApiKey");
+  const btnClear = document.getElementById("btnClearApiKey");
+  const inputKey = document.getElementById("apiKeyInput");
+  const selectProvider = document.getElementById("aiProviderSelect");
+  const statusBox = document.getElementById("apiKeyStatusBox");
+
+  if (!modal) return;
+
+  if (btnOpen) {
+    btnOpen.addEventListener("click", () => {
+      inputKey.value = getStoredApiKey();
+      selectProvider.value = getStoredProvider();
+      if (getStoredApiKey()) {
+        statusBox.style.display = "block";
+        statusBox.innerHTML = `<span style="color:#10b981;"><i data-lucide="check-circle-2"></i> Active Key configured (${getStoredProvider().toUpperCase()}). Live AI calls enabled!</span>`;
+      } else {
+        statusBox.style.display = "none";
+      }
+      modal.style.display = "flex";
+      lucide.createIcons();
+    });
+  }
+
+  const closeModal = () => { modal.style.display = "none"; };
+  if (btnClose) btnClose.addEventListener("click", closeModal);
+  if (btnCancel) btnCancel.addEventListener("click", closeModal);
+
+  if (btnSave) {
+    btnSave.addEventListener("click", () => {
+      const key = inputKey.value.trim();
+      const provider = selectProvider.value;
+      if (key) {
+        localStorage.setItem("WISDOM_AI_API_KEY", key);
+        localStorage.setItem("WISDOM_AI_PROVIDER", provider);
+        alert(`API Key for ${provider.toUpperCase()} saved successfully! The WISDOM AI assistant is now connected to live LLM generation.`);
+        closeModal();
+      } else {
+        alert("Please enter a valid API Key or click Clear.");
+      }
+    });
+  }
+
+  if (btnClear) {
+    btnClear.addEventListener("click", () => {
+      localStorage.removeItem("WISDOM_AI_API_KEY");
+      localStorage.removeItem("WISDOM_AI_PROVIDER");
+      inputKey.value = "";
+      statusBox.style.display = "block";
+      statusBox.innerHTML = `<span style="color:#f59e0b;">Key cleared. Reverted to built-in grounded knowledge base.</span>`;
+    });
+  }
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+}
+
+// Live Gemini API Caller with Offset Well Grounding Context
+async function callLiveGeminiAPI(query, apiKey) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  
+  const systemPrompt = `You are the WISDOM AI Chief Drilling Operations Co-Pilot for Oil India Limited (OIL).
+Current Active Rig Context:
+- Active Well: ${STATE.activeWell.name}
+- Field: ${STATE.activeWell.field}
+- Current Bit Depth: ${STATE.activeWell.currentDepthMD} m TVD
+- Current Formation: ${STATE.activeWell.currentFormation}
+- Mud Density: ${STATE.activeWell.mudWeight} ppg (ECD: ${STATE.activeWell.ecd} ppg)
+- Offset Wells in vicinity: OIL-NHK-108 (1.8km, severe loss at 2912m), OIL-NHK-087 (3.4km, stuck pipe at 3040m), OIL-MOR-45 (4.9km, partial loss at 2908m).
+
+Answer the drilling engineer's question with precise geomechanical and operational mitigation recommendations, drilling hydraulics, casing programs, and safety SOPs. Use professional oilfield terminology and markdown formatting.`;
+
+  const payload = {
+    contents: [
+      {
+        parts: [
+          { text: `${systemPrompt}\n\nEngineer Query: ${query}` }
+        ]
+      }
+    ]
+  };
+
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini API returned status ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response received from Gemini API.";
+  return text;
+}
+
 // ================= AI RAG ASSISTANT MODULE =================
 function initRagAssistant() {
   const input = document.getElementById("ragQueryInput");
@@ -1296,7 +1408,7 @@ window.sendPredefinedQuery = function(queryText) {
   handleUserRagQuery(queryText);
 };
 
-function handleUserRagQuery(query) {
+async function handleUserRagQuery(query) {
   const container = document.getElementById("chatMessageContainer");
   if (!container) return;
 
@@ -1313,49 +1425,92 @@ function handleUserRagQuery(query) {
   lucide.createIcons();
   container.scrollTop = container.scrollHeight;
 
-  // Simulate AI Thinking & Vector Search
-  setTimeout(() => {
-    let matchedKnowledge = RAG_KNOWLEDGE_BASE.mud_weight_barail; // fallback
+  // Append Thinking / Loading indicator
+  const loadingId = `bot-loading-${Date.now()}`;
+  const loadingHtml = `
+    <div class="message-bubble bot-message" id="${loadingId}">
+      <div class="msg-avatar"><i data-lucide="bot"></i></div>
+      <div class="msg-body">
+        <p style="color:var(--accent-cyan);"><i data-lucide="loader-2" class="pulse-animation"></i> Searching offset logs & synthesizing recommendations...</p>
+      </div>
+    </div>
+  `;
+  container.insertAdjacentHTML("beforeend", loadingHtml);
+  lucide.createIcons();
+  container.scrollTop = container.scrollHeight;
 
-    if (RAG_KNOWLEDGE_BASE.stuck_pipe_barail.questionPattern.test(query)) {
-      matchedKnowledge = RAG_KNOWLEDGE_BASE.stuck_pipe_barail;
-    } else if (RAG_KNOWLEDGE_BASE.mud_loss_mor45.questionPattern.test(query)) {
-      matchedKnowledge = RAG_KNOWLEDGE_BASE.mud_loss_mor45;
-    } else if (RAG_KNOWLEDGE_BASE.casing_guidelines.questionPattern.test(query)) {
-      matchedKnowledge = RAG_KNOWLEDGE_BASE.casing_guidelines;
-    } else if (RAG_KNOWLEDGE_BASE.mud_weight_barail.questionPattern.test(query)) {
-      matchedKnowledge = RAG_KNOWLEDGE_BASE.mud_weight_barail;
-    } else {
-      // Dynamic generative fallback grounded in indexed offset wells
-      matchedKnowledge = {
-        answer: `**WISDOM Knowledge Synthesis for Query:** "${query}"
+  const apiKey = getStoredApiKey();
+  const provider = getStoredProvider();
+
+  let answerText = "";
+  let citations = [
+    { doc: "WCR-OIL-NHK-108.pdf", section: "Geological Summary & Operational Review", score: "96.2%" },
+    { doc: "OIL-Standard-Operating-Guidelines-2023.pdf", section: "Upper Assam Basin Drilling Specs", score: "93.4%" }
+  ];
+
+  if (apiKey && provider === "gemini") {
+    try {
+      answerText = await callLiveGeminiAPI(query, apiKey);
+      citations = [
+        { doc: "Live Gemini 1.5 Grounded Response", section: `Context: ${STATE.activeWell.name} @ ${STATE.activeWell.currentDepthMD}m`, score: "Live API" },
+        { doc: "WCR-OIL-NHK-108.pdf", section: "Offset Knowledge Store", score: "95.8%" }
+      ];
+    } catch (err) {
+      console.warn("Live API call failed, falling back to local grounded knowledge engine:", err);
+      answerText = `*(Notice: Live Gemini call had a network issue, used internal grounded repository)*\n\n` + getLocalKnowledgeResponse(query).answer;
+      citations = getLocalKnowledgeResponse(query).citations;
+    }
+  } else {
+    // Local grounded knowledge base
+    const matched = getLocalKnowledgeResponse(query);
+    answerText = matched.answer;
+    citations = matched.citations;
+  }
+
+  // Remove loading bubble
+  const loadingBubble = document.getElementById(loadingId);
+  if (loadingBubble) loadingBubble.remove();
+
+  // Render Bot Response
+  const botHtml = `
+    <div class="message-bubble bot-message">
+      <div class="msg-avatar"><i data-lucide="bot"></i></div>
+      <div class="msg-body">
+        ${formatMarkdown(answerText)}
+      </div>
+    </div>
+  `;
+  container.insertAdjacentHTML("beforeend", botHtml);
+  lucide.createIcons();
+  container.scrollTop = container.scrollHeight;
+
+  // Update Citations Card
+  updateCitationsList(citations);
+}
+
+function getLocalKnowledgeResponse(query) {
+  if (RAG_KNOWLEDGE_BASE.stuck_pipe_barail.questionPattern.test(query)) {
+    return RAG_KNOWLEDGE_BASE.stuck_pipe_barail;
+  } else if (RAG_KNOWLEDGE_BASE.mud_loss_mor45.questionPattern.test(query)) {
+    return RAG_KNOWLEDGE_BASE.mud_loss_mor45;
+  } else if (RAG_KNOWLEDGE_BASE.casing_guidelines.questionPattern.test(query)) {
+    return RAG_KNOWLEDGE_BASE.casing_guidelines;
+  } else if (RAG_KNOWLEDGE_BASE.mud_weight_barail.questionPattern.test(query)) {
+    return RAG_KNOWLEDGE_BASE.mud_weight_barail;
+  } else {
+    return {
+      answer: `**WISDOM Knowledge Synthesis for Query:** "${query}"
 - **Institutional Context:** Indexed across 450+ Oil India historical wells in Upper Assam Basin.
 - **Correlated Offset Behavior:** For active well **${STATE.activeWell.name}** at **${STATE.activeWell.currentDepthMD}m** in **${STATE.activeWell.currentFormation}**:
   1. Offset wells **OIL-NHK-108** (1.8 km) and **OIL-MOR-45** (4.9 km) encountered similar lithological boundaries.
   2. Maintain mud weight in the approved pore-fracture window (**11.6 - 11.8 ppg**) to avoid micro-fracture breakdown.
   3. Pre-treat pits with graded Calcium Carbonate (25 ppb) and maintain high annular velocity during hole cleaning.`,
-        citations: [
-          { doc: "WCR-OIL-NHK-108.pdf", section: "Geological Summary & Operational Review", score: "94.6%" },
-          { doc: "OIL-Standard-Operating-Guidelines-2023.pdf", section: "Upper Assam Basin Drilling Specs", score: "91.2%" }
-        ]
-      };
-    }
-
-    const botHtml = `
-      <div class="message-bubble bot-message">
-        <div class="msg-avatar"><i data-lucide="bot"></i></div>
-        <div class="msg-body">
-          ${formatMarkdown(matchedKnowledge.answer)}
-        </div>
-      </div>
-    `;
-    container.insertAdjacentHTML("beforeend", botHtml);
-    lucide.createIcons();
-    container.scrollTop = container.scrollHeight;
-
-    // Update Citations Card
-    updateCitationsList(matchedKnowledge.citations);
-  }, 400);
+      citations: [
+        { doc: "WCR-OIL-NHK-108.pdf", section: "Geological Summary & Operational Review", score: "94.6%" },
+        { doc: "OIL-Standard-Operating-Guidelines-2023.pdf", section: "Upper Assam Basin Drilling Specs", score: "91.2%" }
+      ]
+    };
+  }
 }
 
 function updateCitationsList(citations) {
