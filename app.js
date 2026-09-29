@@ -4,9 +4,9 @@
  * Proactive Decision Support & Offset Well Analytics Platform
  */
 
-// ================= GLOBAL STATE & DATASETS =================
-const STATE = {
-  activeWell: {
+// ================= MULTI-WELL REPOSITORY & GLOBAL STATE =================
+const ACTIVE_WELL_CATALOG = {
+  "OIL-NHK-EXP-502": {
     name: "OIL-NHK-EXP-502",
     field: "Naharkatiya Field (Upper Assam)",
     lat: 27.2885,
@@ -16,22 +16,72 @@ const STATE = {
     targetDepth: 3900,
     currentFormation: "Barail Sandstone (Main Sand #2)",
     mudWeight: 11.8,
+    ecd: 12.18,
+    flowRate: 480,
+    rpm: 95,
+    overbalance: 420,
     rop: 14.2,
     wob: 22.5,
     torque: 16.8,
     spudDate: "2024-08-12",
     status: "Drilling Ahead"
   },
+  "OIL-MOR-EXP-104": {
+    name: "OIL-MOR-EXP-104",
+    field: "Moran Field (Deep Eocene Prospect)",
+    lat: 27.2510,
+    lng: 95.3580,
+    currentDepthMD: 3420,
+    currentDepthTVD: 3415,
+    targetDepth: 4250,
+    currentFormation: "Kopili Shale / Eocene Transition",
+    mudWeight: 12.4,
+    ecd: 12.85,
+    flowRate: 420,
+    rpm: 80,
+    overbalance: 510,
+    rop: 8.5,
+    wob: 28.0,
+    torque: 22.4,
+    spudDate: "2024-07-01",
+    status: "Drilling Ahead"
+  },
+  "OIL-DUL-EXP-301": {
+    name: "OIL-DUL-EXP-301",
+    field: "Duliajan North Exploration Block",
+    lat: 27.3350,
+    lng: 95.3100,
+    currentDepthMD: 2150,
+    currentDepthTVD: 2145,
+    targetDepth: 3600,
+    currentFormation: "Tipam Sandstone (Upper Member)",
+    mudWeight: 11.2,
+    ecd: 11.55,
+    flowRate: 520,
+    rpm: 110,
+    overbalance: 310,
+    rop: 19.4,
+    wob: 18.0,
+    torque: 12.6,
+    spudDate: "2024-09-10",
+    status: "Drilling Ahead"
+  }
+};
+
+const STATE = {
+  activeWell: { ...ACTIVE_WELL_CATALOG["OIL-NHK-EXP-502"] },
   queryRadiusKm: 5.0,
   targetFormationFilter: "Barail",
   riskFilter: "all",
   selectedOffsetWell: null,
   isAutoDrilling: false,
-  autoDrillInterval: null
+  autoDrillInterval: null,
+  simSpeed: 3,
+  mitigationApplied: false
 };
 
-// Rich Offset Well Dataset (Upper Assam Basin: Naharkatiya / Moran / Duliajan / Jorajan)
-const OFFSET_WELLS = [
+// Rich Offset Well Dataset (Upper Assam Basin: Naharkatiya / Moran / Duliajan / Jorajan / Kusijan)
+let OFFSET_WELLS = [
   {
     id: "NHK-108",
     name: "OIL-NHK-108",
@@ -258,7 +308,26 @@ const OFFSET_WELLS = [
   }
 ];
 
-// Pre-loaded Knowledge Q&A database for RAG semantic queries
+// Calculate Haversine Distances from Active Well
+function recalculateOffsetDistances() {
+  OFFSET_WELLS.forEach(well => {
+    const d = calculateHaversine(STATE.activeWell.lat, STATE.activeWell.lng, well.lat, well.lng);
+    well.distKm = parseFloat(d.toFixed(1));
+  });
+}
+
+function calculateHaversine(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+            Math.sin(dLon/2) * Math.sin(dLon/2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  return R * c;
+}
+
+// RAG Knowledge Base
 const RAG_KNOWLEDGE_BASE = {
   stuck_pipe_barail: {
     questionPattern: /stuck pipe|nhk-087|3040|differential|freed/i,
@@ -266,7 +335,7 @@ const RAG_KNOWLEDGE_BASE = {
 - **Mechanism:** Differential sticking occurred across a 14m permeable Barail sand lens with excessive hydrostatic overbalance (ΔP = 520 psi). The drillstring remained static for 18 minutes during directional survey.
 - **Formation Context:** Barail Coal-Shale intercalated with depleted sandstone members having high matrix permeability.
 - **Immediate Resolution:** Spotted 50 bbls of Oil-Based Pipe-Freeing Surfactant Pill across the BHA. Worked string with downward jarring and maximum allowable overpull (120 klbs). The string was freed after 16 hours.
-- **Proactive Recommendation for Current Well (OIL-NHK-EXP-502):**
+- **Proactive Recommendation for Current Well (${STATE.activeWell.name}):**
   1. Maintain mud weight strictly between 11.6 - 11.8 ppg (avoid exceeding 12.0 ppg).
   2. Maintain low fluid loss (< 3.5 cc API) to minimize filter cake thickness.
   3. Enforce strict rig floor protocol: Continuous rotation (>80 RPM) and string movement; limit stationary time during survey/connections to < 2.5 minutes.`,
@@ -300,8 +369,8 @@ const RAG_KNOWLEDGE_BASE = {
       { doc: "WCR-OIL-MOR-45.pdf", section: "Drilling Hydraulics & NPT", score: "91.8%" }
     ]
   },
-  general_casing: {
-    questionPattern: /casing|cementing|9-5\/8|7 inch|setting depth/i,
+  casing_guidelines: {
+    questionPattern: /casing|cementing|9-5\/8|7 inch|setting depth|guidelines/i,
     answer: `**Offset Casing Setting & Cementing Practice for Upper Assam Basin:**
 - **9-5/8" Intermediate Casing:** Set between **2,740m - 2,780m MD**, directly into the competent Top Barail marker to isolate the overlying Tipam water-bearing sands before penetrating high-risk Barail coal-shale sequences.
 - **7" Production Liner / Casing:** Set at planned TD (3,650m - 3,900m MD) through the Kopili / Eocene carbonate sequences.
@@ -315,21 +384,56 @@ const RAG_KNOWLEDGE_BASE = {
 
 // ================= INITIALIZATION & EVENT BINDINGS =================
 document.addEventListener("DOMContentLoaded", () => {
+  recalculateOffsetDistances();
   lucide.createIcons();
   initNavigation();
+  initActiveWellSelector();
   initLeafletMap();
   initOffsetWellList();
   initLookAheadSimulator();
   initStratigraphicCharts();
   initRiskAnalyticsCharts();
+  initParameterSandbox();
   initRagAssistant();
   initNptIncidentTable();
   initIngestionSimulator();
   initArchModal();
 
-  // Trigger initial offset scan
+  // Reset Filters button
+  document.getElementById("btnResetFilters")?.addEventListener("click", () => {
+    document.getElementById("radiusSlider").value = 5;
+    document.getElementById("radiusValue").textContent = "5.0 km";
+    document.getElementById("targetFormationFilter").value = "all";
+    document.getElementById("riskFilter").value = "all";
+    STATE.queryRadiusKm = 5.0;
+    STATE.targetFormationFilter = "all";
+    STATE.riskFilter = "all";
+    if (radiusCircle) radiusCircle.setRadius(5000);
+    renderOffsetMarkers();
+    renderOffsetWellList();
+  });
+
+  // Radar Scan button
   document.getElementById("btnTriggerScan")?.addEventListener("click", () => {
     scanOffsetRadius(STATE.queryRadiusKm);
+  });
+
+  // Apply Mitigation Pill button
+  document.getElementById("btnApplyMitigationPill")?.addEventListener("click", () => {
+    applyLcmMitigation();
+  });
+
+  // Quick action buttons in well detail bar
+  document.getElementById("btnCorrelateSelectedWell")?.addEventListener("click", () => {
+    const corrBtn = document.querySelector('.nav-btn[data-tab="correlation"]');
+    if (corrBtn) corrBtn.click();
+  });
+
+  document.getElementById("btnQueryAIForWell")?.addEventListener("click", () => {
+    const aiBtn = document.querySelector('.nav-btn[data-tab="ai-assistant"]');
+    if (aiBtn) aiBtn.click();
+    const wellName = STATE.selectedOffsetWell ? STATE.selectedOffsetWell.name : "OIL-NHK-108";
+    window.sendPredefinedQuery(`Summarize all drilling hazards and successful mitigations from offset well ${wellName}`);
   });
 });
 
@@ -349,24 +453,97 @@ function initNavigation() {
       if (activePane) {
         activePane.classList.add("active");
         lucide.createIcons();
+
+        // Invalidate map size on tab switch
         if (targetTab === "geospatial" && window.leafletMapInstance) {
-          setTimeout(() => window.leafletMapInstance.invalidateSize(), 200);
+          setTimeout(() => {
+            window.leafletMapInstance.invalidateSize();
+            if (activeWellMarker) {
+              window.leafletMapInstance.panTo([STATE.activeWell.lat, STATE.activeWell.lng]);
+            }
+          }, 150);
+        }
+
+        // Resize charts on tab switch
+        if (targetTab === "correlation" || targetTab === "risk-analytics") {
+          setTimeout(() => {
+            if (window.correlationCharts) window.correlationCharts.forEach(c => c.resize());
+            if (window.riskProfileChart) window.riskProfileChart.resize();
+            if (window.poreChart) window.poreChart.resize();
+          }, 150);
         }
       }
     });
   });
 }
 
+// ================= ACTIVE WELL SWITCHER =================
+function initActiveWellSelector() {
+  const selector = document.getElementById("activeWellSelector");
+  if (!selector) return;
+
+  selector.addEventListener("change", (e) => {
+    const selectedKey = e.target.value;
+    if (ACTIVE_WELL_CATALOG[selectedKey]) {
+      STATE.activeWell = { ...ACTIVE_WELL_CATALOG[selectedKey] };
+      STATE.mitigationApplied = false;
+
+      // Update top ticker
+      updateTopTelemetryBar();
+
+      // Recalculate distances and update UI
+      recalculateOffsetDistances();
+      updateMapActiveWell();
+      renderOffsetMarkers();
+      renderOffsetWellList();
+
+      // Update Look-ahead depth slider & charts
+      const depthSlider = document.getElementById("liveDepthSlider");
+      if (depthSlider) {
+        depthSlider.value = STATE.activeWell.currentDepthMD;
+        updateDepthSimulation(STATE.activeWell.currentDepthMD);
+      }
+
+      // Update Correlation header
+      const corrActiveName = document.getElementById("corrActiveWellName");
+      const corrActiveSub = document.getElementById("corrActiveWellSub");
+      if (corrActiveName) corrActiveName.textContent = STATE.activeWell.name;
+      if (corrActiveSub) corrActiveSub.textContent = `Current: ${STATE.activeWell.currentDepthMD}m | Target: ${STATE.activeWell.targetDepth}m`;
+
+      // Update Sandbox sliders
+      document.getElementById("sliderMudWt").value = STATE.activeWell.mudWeight;
+      document.getElementById("lblMudWt").textContent = `${STATE.activeWell.mudWeight} ppg`;
+      document.getElementById("sliderFlowRate").value = STATE.activeWell.flowRate;
+      document.getElementById("lblFlowRate").textContent = `${STATE.activeWell.flowRate} GPM`;
+      document.getElementById("sliderRPM").value = STATE.activeWell.rpm;
+      document.getElementById("lblRPM").textContent = `${STATE.activeWell.rpm} RPM`;
+      document.getElementById("sliderOverbalance").value = STATE.activeWell.overbalance;
+      document.getElementById("lblOverbalance").textContent = `${STATE.activeWell.overbalance} psi`;
+      recalculateRiskScores();
+    }
+  });
+}
+
+function updateTopTelemetryBar() {
+  document.getElementById("topLiveDepth").textContent = `${STATE.activeWell.currentDepthMD.toLocaleString()} m`;
+  document.getElementById("topFormation").textContent = STATE.activeWell.currentFormation.split(" (")[0];
+  document.getElementById("topMudWt").textContent = `${STATE.activeWell.mudWeight} ppg`;
+  document.getElementById("topECD").textContent = `${STATE.activeWell.ecd} ppg`;
+  document.getElementById("topROP").textContent = `${STATE.activeWell.rop} m/hr`;
+  document.getElementById("topTorque").textContent = `${STATE.activeWell.torque} kft-lb`;
+}
+
 // ================= LEAFLET MAP MODULE =================
 let mapInstance = null;
 let radiusCircle = null;
+let activeWellMarker = null;
 let wellMarkers = [];
+let connectionLine = null;
 
 function initLeafletMap() {
   const mapElement = document.getElementById("leafletMap");
   if (!mapElement) return;
 
-  // Center on Upper Assam Oilfields (Naharkatiya / Duliajan)
   mapInstance = L.map("leafletMap", {
     center: [STATE.activeWell.lat, STATE.activeWell.lng],
     zoom: 12,
@@ -384,16 +561,16 @@ function initLeafletMap() {
   // Add Active Well Marker with custom glowing icon
   const activeIcon = L.divIcon({
     className: "custom-active-pin",
-    html: `<div style="background:#0284c7; width:18px; height:18px; border-radius:50%; border:3px solid #38bdf8; box-shadow:0 0 16px #38bdf8; animation:pulse-animation 1.5s infinite;"></div>`,
-    iconSize: [18, 18],
-    iconAnchor: [9, 9]
+    html: `<div style="background:#0284c7; width:20px; height:20px; border-radius:50%; border:3px solid #38bdf8; box-shadow:0 0 16px #38bdf8; animation:pulse-animation 1.5s infinite;"></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10]
   });
 
-  const activeMarker = L.marker([STATE.activeWell.lat, STATE.activeWell.lng], { icon: activeIcon })
+  activeWellMarker = L.marker([STATE.activeWell.lat, STATE.activeWell.lng], { icon: activeIcon })
     .addTo(mapInstance)
     .bindPopup(`
       <div style="color:#000; font-family:sans-serif; font-size:12px;">
-        <strong style="color:#0284c7; font-size:13px;">${STATE.activeWell.name} (ACTIVE DRILLING)</strong><br>
+        <strong style="color:#0284c7; font-size:13px;">${STATE.activeWell.name} (ACTIVE DRILLING RIG)</strong><br>
         <b>Field:</b> ${STATE.activeWell.field}<br>
         <b>Current Depth:</b> ${STATE.activeWell.currentDepthMD} m TVD<br>
         <b>Formation:</b> ${STATE.activeWell.currentFormation}<br>
@@ -444,6 +621,32 @@ function initLeafletMap() {
   });
 }
 
+function updateMapActiveWell() {
+  if (!mapInstance || !activeWellMarker) return;
+
+  activeWellMarker.setLatLng([STATE.activeWell.lat, STATE.activeWell.lng]);
+  activeWellMarker.setPopupContent(`
+    <div style="color:#000; font-family:sans-serif; font-size:12px;">
+      <strong style="color:#0284c7; font-size:13px;">${STATE.activeWell.name} (ACTIVE DRILLING RIG)</strong><br>
+      <b>Field:</b> ${STATE.activeWell.field}<br>
+      <b>Current Depth:</b> ${STATE.activeWell.currentDepthMD} m TVD<br>
+      <b>Formation:</b> ${STATE.activeWell.currentFormation}<br>
+      <b>Mud Weight:</b> ${STATE.activeWell.mudWeight} ppg | <b>ROP:</b> ${STATE.activeWell.rop} m/hr
+    </div>
+  `);
+
+  if (radiusCircle) {
+    radiusCircle.setLatLng([STATE.activeWell.lat, STATE.activeWell.lng]);
+  }
+
+  if (connectionLine) {
+    mapInstance.removeLayer(connectionLine);
+    connectionLine = null;
+  }
+
+  mapInstance.panTo([STATE.activeWell.lat, STATE.activeWell.lng]);
+}
+
 function renderOffsetMarkers() {
   if (!mapInstance) return;
 
@@ -460,20 +663,20 @@ function renderOffsetMarkers() {
 
     const offsetIcon = L.divIcon({
       className: "custom-offset-pin",
-      html: `<div style="background:${pinColor}; width:12px; height:12px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 8px ${pinColor};"></div>`,
-      iconSize: [12, 12],
+      html: `<div style="background:${pinColor}; width:13px; height:13px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 8px ${pinColor}; cursor:pointer;"></div>`,
+      iconSize: [13, 13],
       iconAnchor: [6, 6]
     });
 
     const marker = L.marker([well.lat, well.lng], { icon: offsetIcon })
       .addTo(mapInstance)
       .bindPopup(`
-        <div style="color:#000; font-family:sans-serif; font-size:12px; min-width:180px;">
+        <div style="color:#000; font-family:sans-serif; font-size:12px; min-width:190px;">
           <strong style="font-size:13px;">${well.name}</strong> (${well.distKm} km away)<br>
           <b>TD:</b> ${well.td} m | <b>Status:</b> ${well.status}<br>
-          <b>Hazard History:</b> <span style="color:${pinColor}; font-weight:700;">${well.hazard}</span><br>
-          <button onclick="window.selectOffsetWell('${well.id}')" style="margin-top:6px; background:#0284c7; color:#fff; border:none; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:11px;">
-            Inspect Offset History
+          <b>Hazard Encountered:</b> <span style="color:${pinColor}; font-weight:700;">${well.hazard}</span><br>
+          <button onclick="window.selectOffsetWell('${well.id}')" style="margin-top:6px; background:#0284c7; color:#fff; border:none; padding:4px 8px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600;">
+            Inspect Full Offset History
           </button>
         </div>
       `);
@@ -489,12 +692,17 @@ function renderOffsetMarkers() {
 function getFilteredOffsetWells() {
   return OFFSET_WELLS.filter(well => {
     const inRadius = well.distKm <= STATE.queryRadiusKm;
+    let matchesFormation = true;
+    if (STATE.targetFormationFilter !== "all") {
+      matchesFormation = Object.keys(well.formationTops).some(f => f.toLowerCase().includes(STATE.targetFormationFilter.toLowerCase()));
+    }
+
     let matchesRisk = true;
     if (STATE.riskFilter === "severe_loss") matchesRisk = well.hazard.toLowerCase().includes("loss");
     else if (STATE.riskFilter === "stuck_pipe") matchesRisk = well.hazard.toLowerCase().includes("stuck") || well.hazard.toLowerCase().includes("fishing");
     else if (STATE.riskFilter === "kick_gas") matchesRisk = well.hazard.toLowerCase().includes("kick") || well.hazard.toLowerCase().includes("influx");
 
-    return inRadius && matchesRisk;
+    return inRadius && matchesFormation && matchesRisk;
   });
 }
 
@@ -513,7 +721,7 @@ function renderOffsetWellList() {
   if (offsetCountBadge) offsetCountBadge.textContent = filtered.length;
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div style="padding:20px; text-align:center; color:#64748b;">No offset wells found within ${STATE.queryRadiusKm} km radius. Expand radius slider.</div>`;
+    container.innerHTML = `<div style="padding:20px; text-align:center; color:#64748b;">No offset wells found within ${STATE.queryRadiusKm} km radius with current filters.<br><small>Try expanding search radius slider above.</small></div>`;
     return;
   }
 
@@ -546,9 +754,9 @@ window.selectOffsetWell = function(wellId) {
   STATE.selectedOffsetWell = well;
 
   // Update detail drawer
-  document.getElementById("detailWellTitle").textContent = `${well.name} - Detailed Offset Profile (${well.field} Field)`;
+  document.getElementById("detailWellTitle").textContent = `${well.name} - Offset Profile (${well.field} Field)`;
   document.getElementById("detTD").textContent = `${well.td} m TVD`;
-  document.getElementById("detDist").textContent = `${well.distKm} km from Active Well`;
+  document.getElementById("detDist").textContent = `${well.distKm} km from ${STATE.activeWell.name}`;
   document.getElementById("detYear").textContent = well.year;
   document.getElementById("detHazard").textContent = well.hazard;
   document.getElementById("detMud").textContent = well.mudWeightAvg;
@@ -557,15 +765,25 @@ window.selectOffsetWell = function(wellId) {
   // Highlight in list
   renderOffsetWellList();
 
-  // Center map on well
+  // Draw connecting line from active well to this offset on map
   if (mapInstance) {
+    if (connectionLine) mapInstance.removeLayer(connectionLine);
+    connectionLine = L.polyline([
+      [STATE.activeWell.lat, STATE.activeWell.lng],
+      [well.lat, well.lng]
+    ], {
+      color: "#38bdf8",
+      weight: 2,
+      dashArray: "4, 6"
+    }).addTo(mapInstance);
+
     mapInstance.panTo([well.lat, well.lng]);
   }
 };
 
 function scanOffsetRadius(radius) {
   const count = getFilteredOffsetWells().length;
-  alert(`Spatial Radar Scan Completed.\nFound ${count} historical offset wells within ${radius} km of active well ${STATE.activeWell.name}.\nRisk Profiles & Stratigraphic tops correlated.`);
+  alert(`Spatial Radar Scan Completed for ${STATE.activeWell.name}.\nFound ${count} historical offset wells within ${radius} km.\nStratigraphic tops aligned & look-ahead risk models updated.`);
 }
 
 // ================= LOOK-AHEAD DEPTH ALERTS MODULE =================
@@ -573,6 +791,13 @@ function initLookAheadSimulator() {
   const slider = document.getElementById("liveDepthSlider");
   const display = document.getElementById("sliderDepthDisplay");
   const autoDrillBtn = document.getElementById("btnAutoDrill");
+  const speedSelect = document.getElementById("simSpeedSelect");
+
+  if (speedSelect) {
+    speedSelect.addEventListener("change", (e) => {
+      STATE.simSpeed = parseInt(e.target.value);
+    });
+  }
 
   if (slider && display) {
     slider.addEventListener("input", (e) => {
@@ -586,20 +811,20 @@ function initLookAheadSimulator() {
       if (STATE.isAutoDrilling) {
         clearInterval(STATE.autoDrillInterval);
         STATE.isAutoDrilling = false;
-        autoDrillBtn.innerHTML = `<i data-lucide="play"></i> Auto Drill Sim`;
+        autoDrillBtn.innerHTML = `<i data-lucide="play"></i> Auto Drill`;
         lucide.createIcons();
       } else {
         STATE.isAutoDrilling = true;
-        autoDrillBtn.innerHTML = `<i data-lucide="pause"></i> Pause Sim`;
+        autoDrillBtn.innerHTML = `<i data-lucide="pause"></i> Pause Drill`;
         lucide.createIcons();
 
         STATE.autoDrillInterval = setInterval(() => {
           let curr = parseInt(slider.value);
           if (curr >= 3780) curr = 1500;
-          curr += 15;
+          curr += (5 * STATE.simSpeed);
           slider.value = curr;
           updateDepthSimulation(curr);
-        }, 600);
+        }, 500);
       }
     });
   }
@@ -626,6 +851,13 @@ function updateDepthSimulation(depth) {
     if (label) label.textContent = `BIT @ ${depth}m`;
   }
 
+  // Update correlation bit marker position
+  const corrBitMarker = document.getElementById("corrBitMarker");
+  if (corrBitMarker) {
+    corrBitMarker.style.top = `${pct}%`;
+    corrBitMarker.innerHTML = `<strong>BIT @ ${depth}m</strong>`;
+  }
+
   // Evaluate Active Alerts within ±150m depth window
   evaluateLookAheadAlerts(depth);
 }
@@ -637,24 +869,44 @@ function evaluateLookAheadAlerts(currentDepth) {
   const currentHorizonTag = document.getElementById("currentHorizonTag");
   const sopContainer = document.getElementById("sopContentContainer");
   const quotesContainer = document.getElementById("historicalDdrQuotes");
+  const hazardBanner = document.getElementById("liveHazardBanner");
+  const bannerTitle = document.getElementById("bannerTitle");
+  const bannerDesc = document.getElementById("bannerDesc");
 
-  // Determine current formation
+  // Determine current formation & dynamic drilling parameters
   let formation = "Girujan Clay (1,500m - 2,100m)";
-  if (currentDepth >= 2100 && currentDepth < 2750) formation = "Tipam Sandstone (2,100m - 2,750m)";
-  else if (currentDepth >= 2750 && currentDepth < 3400) formation = "Barail Coal-Shale / Main Sand (2,750m - 3,400m)";
-  else if (currentDepth >= 3400) formation = "Kopili Shale & Eocene Carbonate (3,400m - 4,000m)";
+  let rop = 18.5;
+  let torque = 12.0;
 
+  if (currentDepth >= 2100 && currentDepth < 2750) {
+    formation = "Tipam Sandstone (2,100m - 2,750m)";
+    rop = 22.0;
+    torque = 14.5;
+  } else if (currentDepth >= 2750 && currentDepth < 3400) {
+    formation = "Barail Coal-Shale / Main Sand (2,750m - 3,400m)";
+    rop = (currentDepth >= 2900 && currentDepth <= 2940) ? 6.2 : 14.2;
+    torque = (currentDepth >= 2900 && currentDepth <= 2940) ? 24.5 : 16.8;
+  } else if (currentDepth >= 3400) {
+    formation = "Kopili Shale & Eocene Carbonate (3,400m - 4,000m)";
+    rop = 7.8;
+    torque = 21.0;
+  }
+
+  STATE.activeWell.currentFormation = formation;
+  STATE.activeWell.rop = rop;
+  STATE.activeWell.torque = torque;
+  document.getElementById("topROP").textContent = `${rop} m/hr`;
+  document.getElementById("topTorque").textContent = `${torque} kft-lb`;
+  document.getElementById("topFormation").textContent = formation.split(" (")[0];
   if (currentHorizonTag) currentHorizonTag.textContent = formation;
-  const topFormation = document.getElementById("topFormation");
-  if (topFormation) topFormation.textContent = formation.split(" (")[0];
 
-  // Scan offset well incidents within depth threshold [currentDepth - 80, currentDepth + 150]
+  // Scan offset well incidents within depth threshold [currentDepth - 60, currentDepth + 150]
   const windowAlerts = [];
 
   OFFSET_WELLS.forEach(well => {
     well.incidents.forEach(inc => {
       const depthDiff = inc.depth - currentDepth;
-      if (depthDiff >= -50 && depthDiff <= 160) {
+      if (depthDiff >= -50 && depthDiff <= 150) {
         windowAlerts.push({
           wellName: well.name,
           distKm: well.distKm,
@@ -668,14 +920,26 @@ function evaluateLookAheadAlerts(currentDepth) {
   if (activeAlertCount) activeAlertCount.textContent = windowAlerts.length;
   if (alertBadge) alertBadge.textContent = windowAlerts.length;
 
+  // Critical Hazard Banner handling (when bit is within 40m of hazard)
+  const criticalHazard = windowAlerts.find(a => Math.abs(a.depthDiff) <= 40);
+  if (criticalHazard && !STATE.mitigationApplied) {
+    if (hazardBanner) {
+      hazardBanner.style.display = "flex";
+      if (bannerTitle) bannerTitle.textContent = `CRITICAL HAZARD: Approaching ${criticalHazard.incident.type} Zone (@ ${criticalHazard.incident.depth}m)`;
+      if (bannerDesc) bannerDesc.textContent = `Offset ${criticalHazard.wellName} (${criticalHazard.distKm} km) experienced: "${criticalHazard.incident.rootCause}"`;
+    }
+  } else {
+    if (hazardBanner) hazardBanner.style.display = "none";
+  }
+
   // Render Alert Feed Cards
   if (windowAlerts.length === 0) {
     if (lookaheadFeed) {
       lookaheadFeed.innerHTML = `
         <div style="padding:24px; text-align:center; background:var(--bg-surface); border-radius:8px; border:1px dashed var(--border-color);">
           <i data-lucide="shield-check" style="width:36px; height:36px; color:#10b981; margin-bottom:8px;"></i>
-          <h4 style="color:#10b981;">No Major Offset Hazard in Next 150m</h4>
-          <p class="text-muted" style="font-size:12px; margin-top:4px;">Historical drilling parameters in this interval were stable across nearby Naharkatiya wells.</p>
+          <h4 style="color:#10b981;">No Major Offset Hazards in Next 150m</h4>
+          <p class="text-muted" style="font-size:12px; margin-top:4px;">Historical drilling parameters in this interval were stable across nearby offset wells.</p>
         </div>
       `;
       lucide.createIcons();
@@ -685,7 +949,7 @@ function evaluateLookAheadAlerts(currentDepth) {
 
   if (lookaheadFeed) {
     lookaheadFeed.innerHTML = windowAlerts.map(a => {
-      const isCritical = a.depthDiff >= 0 && a.depthDiff <= 80;
+      const isCritical = a.depthDiff >= -20 && a.depthDiff <= 60;
       const cardType = isCritical ? "alert-critical" : "alert-warning";
       const icon = isCritical ? "alert-triangle" : "info";
       const diffText = a.depthDiff >= 0 ? `Expected in ${a.depthDiff}m ahead (@ ${a.incident.depth}m)` : `Active in current zone (@ ${a.incident.depth}m)`;
@@ -722,7 +986,7 @@ function evaluateLookAheadAlerts(currentDepth) {
         <div class="sop-checklist">
           <div class="check-item"><i data-lucide="check-circle-2"></i> Verify mud weight & ECD window before drilling within 30m of marker.</div>
           <div class="check-item"><i data-lucide="check-circle-2"></i> Pre-condition pit with recommended LCM or shale inhibitors.</div>
-          <div class="check-item"><i data-lucide="check-circle-2"></i> Maintain continuous string movement during surveys and connections.</div>
+          <div class="check-item"><i data-lucide="check-circle-2"></i> Maintain continuous string movement (>80 RPM) during surveys and connections.</div>
         </div>
       </div>
     `;
@@ -739,19 +1003,56 @@ function evaluateLookAheadAlerts(currentDepth) {
   }
 }
 
-// ================= STRATIGRAPHIC CORRELATION CHARTS =================
-function initStratigraphicCharts() {
-  createSyntheticWellLog("chartActiveWellTrack", [45, 60, 52, 95, 110, 85, 42, 55, 120, 135, 75, 50], [10.5, 10.8, 11.2, 11.5, 11.8, 11.8, 11.9, 12.1], "#38bdf8");
-  createSyntheticWellLog("chartOffset1Track", [42, 58, 50, 92, 115, 88, 40, 52, 118, 138, 70, 48], [10.4, 10.7, 11.1, 11.4, 11.7, 12.2, 11.7, 11.8], "#10b981");
-  createSyntheticWellLog("chartOffset2Track", [48, 62, 55, 98, 108, 82, 45, 58, 122, 130, 78, 52], [10.5, 10.9, 11.3, 11.6, 12.0, 12.4, 12.1, 12.0], "#f59e0b");
-  createSyntheticWellLog("chartOffset3Track", [44, 59, 53, 94, 112, 86, 41, 54, 119, 136, 72, 49], [10.4, 10.8, 11.2, 11.5, 11.8, 11.9, 12.0, 12.3], "#a855f7");
+function applyLcmMitigation() {
+  STATE.mitigationApplied = true;
+  STATE.activeWell.mudWeight = 11.6;
+  STATE.activeWell.ecd = 11.95;
+  updateTopTelemetryBar();
+  document.getElementById("sliderMudWt").value = 11.6;
+  document.getElementById("lblMudWt").textContent = "11.6 ppg";
+
+  const hazardBanner = document.getElementById("liveHazardBanner");
+  if (hazardBanner) {
+    hazardBanner.innerHTML = `
+      <div class="banner-icon" style="color:#10b981;"><i data-lucide="check-circle-2"></i></div>
+      <div class="banner-content">
+        <strong style="color:#10b981;">MITIGATION APPLIED: Active Mud Pre-Treated with 30 ppb LCM Pill</strong>
+        <p>Mud density reduced to 11.6 ppg (ECD: 11.95 ppg). Lost circulation risk mitigated for Barail Coal Seam #3 penetration.</p>
+      </div>
+    `;
+    lucide.createIcons();
+    setTimeout(() => {
+      hazardBanner.style.display = "none";
+    }, 4000);
+  }
+
+  recalculateRiskScores();
 }
 
-function createSyntheticWellLog(canvasId, grData, mudData, primaryColor) {
-  const ctx = document.getElementById(canvasId);
-  if (!ctx) return;
+// ================= STRATIGRAPHIC CORRELATION CHARTS =================
+function initStratigraphicCharts() {
+  window.correlationCharts = [];
+  window.correlationCharts.push(createSyntheticWellLog("chartActiveWellTrack", [45, 60, 52, 95, 110, 85, 42, 55, 120, 135, 75, 50], "#38bdf8"));
+  window.correlationCharts.push(createSyntheticWellLog("chartOffset1Track", [42, 58, 50, 92, 115, 88, 40, 52, 118, 138, 70, 48], "#10b981"));
+  window.correlationCharts.push(createSyntheticWellLog("chartOffset2Track", [48, 62, 55, 98, 108, 82, 45, 58, 122, 130, 78, 52], "#f59e0b"));
+  window.correlationCharts.push(createSyntheticWellLog("chartOffset3Track", [44, 59, 53, 94, 112, 86, 41, 54, 119, 136, 72, 49], "#a855f7"));
 
-  new Chart(ctx, {
+  // Toggle Facies Alignment button
+  document.getElementById("btnToggleFacies")?.addEventListener("click", () => {
+    alert("Stratigraphic tops automatically aligned across all 4 offset wells based on marker bed biostratigraphy and Gamma Ray normalization.");
+  });
+
+  // Export Correlation button
+  document.getElementById("btnExportCorrelation")?.addEventListener("click", () => {
+    alert("Exporting high-resolution Stratigraphic Correlation Panel (PDF / Scaled LAS Log view)... Download starting.");
+  });
+}
+
+function createSyntheticWellLog(canvasId, grData, primaryColor) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return null;
+
+  return new Chart(ctx, {
     type: "line",
     data: {
       labels: ["1500m", "1700m", "1900m", "2100m", "2300m", "2500m", "2750m", "2900m", "3100m", "3300m", "3500m", "3700m"],
@@ -788,12 +1089,88 @@ function createSyntheticWellLog(canvasId, grData, mudData, primaryColor) {
   });
 }
 
-// ================= RISK ANALYTICS CHARTS =================
+// ================= RISK ANALYTICS & PARAMETER SANDBOX =================
+function initParameterSandbox() {
+  const sliderMud = document.getElementById("sliderMudWt");
+  const sliderFlow = document.getElementById("sliderFlowRate");
+  const sliderRPM = document.getElementById("sliderRPM");
+  const sliderOver = document.getElementById("sliderOverbalance");
+
+  if (sliderMud) {
+    sliderMud.addEventListener("input", (e) => {
+      const val = parseFloat(e.target.value);
+      document.getElementById("lblMudWt").textContent = `${val.toFixed(1)} ppg`;
+      STATE.activeWell.mudWeight = val;
+      STATE.activeWell.ecd = parseFloat((val + 0.38).toFixed(2));
+      updateTopTelemetryBar();
+      recalculateRiskScores();
+    });
+  }
+
+  if (sliderFlow) {
+    sliderFlow.addEventListener("input", (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById("lblFlowRate").textContent = `${val} GPM`;
+      STATE.activeWell.flowRate = val;
+      recalculateRiskScores();
+    });
+  }
+
+  if (sliderRPM) {
+    sliderRPM.addEventListener("input", (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById("lblRPM").textContent = `${val} RPM`;
+      STATE.activeWell.rpm = val;
+      recalculateRiskScores();
+    });
+  }
+
+  if (sliderOver) {
+    sliderOver.addEventListener("input", (e) => {
+      const val = parseInt(e.target.value);
+      document.getElementById("lblOverbalance").textContent = `${val} psi`;
+      STATE.activeWell.overbalance = val;
+      recalculateRiskScores();
+    });
+  }
+}
+
+function recalculateRiskScores() {
+  const mw = STATE.activeWell.mudWeight;
+  const ob = STATE.activeWell.overbalance;
+  const rpm = STATE.activeWell.rpm;
+
+  // Mud loss probability formula (higher with high mud weight in fractured Barail)
+  let lossProb = Math.min(Math.max((mw - 10.5) * 28 + (STATE.mitigationApplied ? -35 : 0), 5), 98);
+
+  // Differential sticking index (higher with overbalance, lower with high RPM)
+  let stuckProb = Math.min(Math.max((ob / 7.5) - (rpm * 0.22), 8), 95);
+
+  // Kick risk (higher with low mud weight)
+  let kickProb = Math.min(Math.max((12.5 - mw) * 32, 4), 92);
+
+  // Instability
+  let instProb = Math.min(Math.max(42 + (mw > 12.5 ? 15 : -5), 10), 85);
+
+  // Update gauges
+  document.getElementById("lossRiskVal").textContent = `${lossProb.toFixed(1)}%`;
+  document.getElementById("lossRiskBar").style.width = `${lossProb}%`;
+
+  document.getElementById("stuckRiskVal").textContent = `${stuckProb.toFixed(1)}%`;
+  document.getElementById("stuckRiskBar").style.width = `${stuckProb}%`;
+
+  document.getElementById("kickRiskVal").textContent = `${kickProb.toFixed(1)}%`;
+  document.getElementById("kickRiskBar").style.width = `${kickProb}%`;
+
+  document.getElementById("instabilityVal").textContent = `${instProb.toFixed(1)}%`;
+  document.getElementById("instabilityBar").style.width = `${instProb}%`;
+}
+
 function initRiskAnalyticsCharts() {
   // Chart 1: Multi Risk Profile vs Depth
   const ctxRisk = document.getElementById("chartRiskProfile");
   if (ctxRisk) {
-    new Chart(ctxRisk, {
+    window.riskProfileChart = new Chart(ctxRisk, {
       type: "line",
       data: {
         labels: ["1500m", "1800m", "2100m", "2400m", "2750m", "2900m", "3100m", "3400m", "3700m", "4000m"],
@@ -841,7 +1218,7 @@ function initRiskAnalyticsCharts() {
   // Chart 2: Pore vs Fracture Gradient Window
   const ctxPore = document.getElementById("chartPoreFractureWindow");
   if (ctxPore) {
-    new Chart(ctxPore, {
+    window.poreChart = new Chart(ctxPore, {
       type: "line",
       data: {
         labels: ["1500m", "2000m", "2500m", "2750m", "2910m", "3200m", "3450m", "3800m"],
@@ -888,6 +1265,7 @@ function initRiskAnalyticsCharts() {
 function initRagAssistant() {
   const input = document.getElementById("ragQueryInput");
   const sendBtn = document.getElementById("btnSendRagQuery");
+  const presetBtn = document.getElementById("btnQuickPrompts");
 
   if (sendBtn && input) {
     sendBtn.addEventListener("click", () => {
@@ -902,6 +1280,12 @@ function initRagAssistant() {
       if (e.key === "Enter") {
         sendBtn.click();
       }
+    });
+  }
+
+  if (presetBtn) {
+    presetBtn.addEventListener("click", () => {
+      window.sendPredefinedQuery("What are the casing setting depth and cementing guidelines for 9-5/8 inch casing in Naharkatiya?");
     });
   }
 }
@@ -937,10 +1321,24 @@ function handleUserRagQuery(query) {
       matchedKnowledge = RAG_KNOWLEDGE_BASE.stuck_pipe_barail;
     } else if (RAG_KNOWLEDGE_BASE.mud_loss_mor45.questionPattern.test(query)) {
       matchedKnowledge = RAG_KNOWLEDGE_BASE.mud_loss_mor45;
-    } else if (RAG_KNOWLEDGE_BASE.general_casing.questionPattern.test(query)) {
-      matchedKnowledge = RAG_KNOWLEDGE_BASE.general_casing;
+    } else if (RAG_KNOWLEDGE_BASE.casing_guidelines.questionPattern.test(query)) {
+      matchedKnowledge = RAG_KNOWLEDGE_BASE.casing_guidelines;
     } else if (RAG_KNOWLEDGE_BASE.mud_weight_barail.questionPattern.test(query)) {
       matchedKnowledge = RAG_KNOWLEDGE_BASE.mud_weight_barail;
+    } else {
+      // Dynamic generative fallback grounded in indexed offset wells
+      matchedKnowledge = {
+        answer: `**WISDOM Knowledge Synthesis for Query:** "${query}"
+- **Institutional Context:** Indexed across 450+ Oil India historical wells in Upper Assam Basin.
+- **Correlated Offset Behavior:** For active well **${STATE.activeWell.name}** at **${STATE.activeWell.currentDepthMD}m** in **${STATE.activeWell.currentFormation}**:
+  1. Offset wells **OIL-NHK-108** (1.8 km) and **OIL-MOR-45** (4.9 km) encountered similar lithological boundaries.
+  2. Maintain mud weight in the approved pore-fracture window (**11.6 - 11.8 ppg**) to avoid micro-fracture breakdown.
+  3. Pre-treat pits with graded Calcium Carbonate (25 ppb) and maintain high annular velocity during hole cleaning.`,
+        citations: [
+          { doc: "WCR-OIL-NHK-108.pdf", section: "Geological Summary & Operational Review", score: "94.6%" },
+          { doc: "OIL-Standard-Operating-Guidelines-2023.pdf", section: "Upper Assam Basin Drilling Specs", score: "91.2%" }
+        ]
+      };
     }
 
     const botHtml = `
@@ -957,7 +1355,7 @@ function handleUserRagQuery(query) {
 
     // Update Citations Card
     updateCitationsList(matchedKnowledge.citations);
-  }, 450);
+  }, 400);
 }
 
 function updateCitationsList(citations) {
@@ -993,6 +1391,8 @@ function formatMarkdown(text) {
 function initNptIncidentTable() {
   const tbody = document.getElementById("incidentTableBody");
   const searchInput = document.getElementById("incidentSearchInput");
+  const btnCsv = document.getElementById("btnExportNptCsv");
+  const btnJson = document.getElementById("btnExportNptJson");
   if (!tbody) return;
 
   let allIncidents = [];
@@ -1043,26 +1443,55 @@ function initNptIncidentTable() {
       renderTable(e.target.value);
     });
   }
+
+  if (btnCsv) {
+    btnCsv.addEventListener("click", () => {
+      const csvContent = "data:text/csv;charset=utf-8," +
+        "Well Name,Distance (km),Depth (m),Formation,Incident Type,NPT (Hrs),Root Cause,Mitigation\n" +
+        allIncidents.map(i => `"${i.wellName}","${i.distKm}","${i.depth}","${i.formation}","${i.type}","${i.nptHrs}","${i.rootCause.replace(/"/g, '""')}","${i.mitigation.replace(/"/g, '""')}"`).join("\n");
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", "OIL_NPT_Incidents_Database.csv");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
+
+  if (btnJson) {
+    btnJson.addEventListener("click", () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(allIncidents, null, 2));
+      const link = document.createElement("a");
+      link.setAttribute("href", dataStr);
+      link.setAttribute("download", "OIL_NPT_Incidents_Database.json");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
 }
 
 // ================= OCR & INGESTION PIPELINE MODULE =================
 function initIngestionSimulator() {
   const btn = document.getElementById("btnSimulateUpload");
+  const browseBtn = document.getElementById("btnBrowseFile");
+  const fileInput = document.getElementById("fileInputUploader");
+  const dropzone = document.getElementById("reportDropzone");
   const progressBox = document.getElementById("ingestionProgressBox");
   const stepTitle = document.getElementById("progressStepTitle");
   const progressBar = document.getElementById("ingestProgressBar");
+  const ocrLog = document.getElementById("liveOcrLog");
   const codeOutput = document.getElementById("codeExtractionOutput");
 
-  if (!btn) return;
-
-  btn.addEventListener("click", () => {
+  function triggerProcessing(filename = "WCR-OIL-NHK-124.pdf") {
     if (progressBox) progressBox.style.display = "block";
 
     const steps = [
-      { pct: "25%", text: "Step 1/4: Performing OCR & LayoutLM Table Detection on WCR-OIL-NHK-124.pdf..." },
-      { pct: "50%", text: "Step 2/4: Extracting Geological Tops & Mud Densities via LLM Schema Parser..." },
-      { pct: "75%", text: "Step 3/4: Indexing Operational NPT Incidents into Vector DB & PostGIS..." },
-      { pct: "100%", text: "Step 4/4: Ingestion Complete! Well metadata integrated into eRTMAC-NWIS." }
+      { pct: "25%", text: `Step 1/4: Optical Character Recognition & Layout Parsing (${filename})...`, log: "Running PaddleOCR + LayoutLMv3 table detector on 42 pages..." },
+      { pct: "50%", text: "Step 2/4: Extracting Geological Tops & Mud Programs via LLM Schema Parser...", log: "Identified Tops: Girujan (1505m), Tipam (2110m), Barail (2740m), Kopili (3390m)" },
+      { pct: "75%", text: "Step 3/4: Indexing Operational Incidents into PostGIS & Vector DB...", log: "Extracted Incident: Gas Influx @ 3420m (SIDPP 320 psi). Embeddings stored." },
+      { pct: "100%", text: "Step 4/4: Ingestion Complete! Well integrated into WISDOM repository.", log: "Ingestion pipeline finished in 1.8s. All offset metrics synced." }
     ];
 
     let currentStep = 0;
@@ -1070,12 +1499,14 @@ function initIngestionSimulator() {
       if (currentStep < steps.length) {
         if (progressBar) progressBar.style.width = steps[currentStep].pct;
         if (stepTitle) stepTitle.textContent = steps[currentStep].text;
+        if (ocrLog) ocrLog.textContent = steps[currentStep].log;
         currentStep++;
       } else {
         clearInterval(interval);
         if (codeOutput) {
           codeOutput.textContent = JSON.stringify({
             status: "SUCCESSFULLY_INGESTED",
+            source_file: filename,
             well_header: {
               well_name: "OIL-NHK-124",
               field: "Naharkatiya",
@@ -1102,8 +1533,38 @@ function initIngestionSimulator() {
           }, null, 2);
         }
       }
-    }, 600);
-  });
+    }, 500);
+  }
+
+  if (btn) {
+    btn.addEventListener("click", () => triggerProcessing("WCR-OIL-NHK-124.pdf"));
+  }
+
+  if (browseBtn && fileInput) {
+    browseBtn.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", (e) => {
+      if (e.target.files.length > 0) {
+        triggerProcessing(e.target.files[0].name);
+      }
+    });
+  }
+
+  if (dropzone) {
+    dropzone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = "#0284c7";
+    });
+    dropzone.addEventListener("dragleave", () => {
+      dropzone.style.borderColor = "var(--border-color)";
+    });
+    dropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      dropzone.style.borderColor = "var(--border-color)";
+      if (e.dataTransfer.files.length > 0) {
+        triggerProcessing(e.dataTransfer.files[0].name);
+      }
+    });
+  }
 }
 
 // ================= ARCHITECTURE MODAL =================
@@ -1128,7 +1589,7 @@ function initArchModal() {
             <h4 style="color:#fff;">Core Technological Pillars</h4>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
               <div style="background:var(--bg-surface); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
-                <strong style="color:#38bdf8;">1. Multi-Modal Document Extraction & OCR Pipeline</strong>
+                <strong style="color:#38bdf8;">1. Multi-Modal Ingestion & OCR Pipeline</strong>
                 <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">Extracts unstructured legacy drilling reports, mud logging sheets, and lithology tables into structured JSON schemas using PaddleOCR/Docling + LayoutLM + LLM Structured Extraction.</p>
               </div>
               <div style="background:var(--bg-surface); padding:12px; border-radius:6px; border:1px solid var(--border-color);">

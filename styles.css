@@ -1,5 +1,5 @@
 /* ==========================================================================
-   eRTMAC-NWIS: Styling & Design System
+   WISDOM: Styling & Design System
    Sleek Dark Theme, Modern Energy Analytics Aesthetic, Responsive Layout
    ========================================================================== */
 
@@ -124,13 +124,31 @@ body.dark-theme {
 .telemetry-ticker {
   display: flex;
   align-items: center;
-  background: rgba(15, 23, 42, 0.7);
+  background: rgba(15, 23, 42, 0.85);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   padding: 6px 14px;
-  gap: 18px;
+  gap: 16px;
   overflow-x: auto;
   white-space: nowrap;
+}
+
+.well-selector-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-select-inline {
+  background: #0284c7;
+  color: #fff;
+  border: 1px solid #38bdf8;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  outline: none;
+  cursor: pointer;
 }
 
 .telemetry-item {
@@ -455,6 +473,49 @@ body.dark-theme {
   color: #fff;
 }
 
+/* ================= HAZARD ALERT BANNER ================= */
+.hazard-alert-banner {
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.25) 0%, rgba(245, 158, 11, 0.15) 100%);
+  border: 1px solid #ef4444;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+  box-shadow: 0 0 15px rgba(239, 68, 68, 0.3);
+  animation: pulse-danger 2s infinite;
+}
+
+@keyframes pulse-danger {
+  0% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.5); }
+  100% { box-shadow: 0 0 10px rgba(239, 68, 68, 0.2); }
+}
+
+.hazard-alert-banner .banner-icon {
+  color: #ef4444;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.hazard-alert-banner .banner-content {
+  flex: 1;
+}
+
+.hazard-alert-banner .banner-content strong {
+  color: #fff;
+  font-size: 14px;
+  display: block;
+}
+
+.hazard-alert-banner .banner-content p {
+  color: #cbd5e1;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
 /* ================= TAB 1: GEOSPATIAL MAP ================= */
 .geo-dashboard-grid {
   display: grid;
@@ -599,6 +660,11 @@ body.dark-theme {
   color: #fff;
 }
 
+.detail-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
@@ -676,6 +742,21 @@ body.dark-theme {
   color: var(--text-secondary);
 }
 
+.sim-speed-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-select-sm {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+}
+
 .lookahead-grid {
   display: grid;
   grid-template-columns: 1fr 1.3fr;
@@ -717,14 +798,14 @@ body.dark-theme {
 
 .alert-critical {
   border-left-color: var(--status-danger);
-  background: linear-gradient(90deg, rgba(239, 68, 68, 0.1) 0%, var(--bg-surface) 100%);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.12) 0%, var(--bg-surface) 100%);
+  border: 1px solid rgba(239, 68, 68, 0.35);
 }
 
 .alert-warning {
   border-left-color: var(--status-warning);
-  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1) 0%, var(--bg-surface) 100%);
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.12) 0%, var(--bg-surface) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.35);
 }
 
 .alert-title-row {
@@ -810,7 +891,7 @@ body.dark-theme {
   background: #38bdf8;
   box-shadow: 0 0 10px #38bdf8;
   z-index: 10;
-  transition: top 0.3s ease;
+  transition: top 0.25s ease;
 }
 
 .marker-label {
@@ -988,6 +1069,7 @@ body.dark-theme {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  height: 420px;
 }
 
 .well-track-box.active-well-track {
@@ -1002,6 +1084,19 @@ body.dark-theme {
   text-align: center;
   border-bottom: 1px solid var(--border-color);
   color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.chart-wrapper {
+  flex: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
 }
 
 .formation-strip {
@@ -1029,6 +1124,7 @@ body.dark-theme {
   background: rgba(239, 68, 68, 0.4);
   border-top: 2px solid #ef4444;
   color: #fff;
+  transition: top 0.25s ease;
 }
 
 .f-incident {
@@ -1040,11 +1136,42 @@ body.dark-theme {
   border-radius: 3px;
 }
 
-.inc-loss { background: rgba(239, 68, 68, 0.8); color: #fff; }
+.inc-loss { background: rgba(239, 68, 68, 0.85); color: #fff; }
 .inc-stuck { background: rgba(245, 158, 11, 0.9); color: #000; }
 .inc-kick { background: rgba(220, 38, 38, 0.9); color: #fff; }
 
-/* ================= TAB 4: RISK DASHBOARD ================= */
+/* ================= TAB 4: RISK DASHBOARD & SANDBOX ================= */
+.param-sandbox-card {
+  background: rgba(19, 29, 51, 0.8);
+  border-color: var(--border-highlight);
+}
+
+.sandbox-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.sandbox-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sandbox-control label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sandbox-control label strong {
+  color: var(--accent-cyan);
+  font-family: var(--font-mono);
+}
+
+.sandbox-control input[type="range"] {
+  accent-color: var(--accent-primary);
+}
+
 .risk-dashboard-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1097,6 +1224,7 @@ body.dark-theme {
 .progress-fill {
   height: 100%;
   border-radius: 3px;
+  transition: width 0.3s ease;
 }
 
 .fill-danger { background: var(--status-danger); }
@@ -1362,7 +1490,7 @@ body.dark-theme {
 .dropzone {
   border: 2px dashed var(--border-color);
   border-radius: var(--radius-md);
-  padding: 40px 20px;
+  padding: 30px 20px;
   text-align: center;
   cursor: pointer;
   transition: all 0.2s;
@@ -1381,6 +1509,12 @@ body.dark-theme {
   margin-bottom: 12px;
 }
 
+.dropzone-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
 .pipeline-progress {
   margin-top: 16px;
   background: var(--bg-surface);
@@ -1393,6 +1527,16 @@ body.dark-theme {
   font-weight: 600;
   margin-bottom: 6px;
   color: var(--accent-cyan);
+}
+
+.live-ocr-log {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 6px;
+  background: #090e17;
+  padding: 6px;
+  border-radius: 4px;
 }
 
 .extraction-preview {
@@ -1476,4 +1620,5 @@ body.dark-theme {
 .text-warning { color: #fbbf24 !important; }
 .text-success { color: #34d399 !important; }
 .text-muted { color: var(--text-muted) !important; }
+.mb-3 { margin-bottom: 12px; }
 .mt-3 { margin-top: 12px; }
