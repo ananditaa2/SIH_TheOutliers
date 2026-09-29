@@ -70,6 +70,12 @@
     </div>
 
     <div class="nav-right">
+      <button class="btn btn-outline" id="btnToggleSound" title="Toggle Hazard Audio Alerts">
+        <i data-lucide="volume-2" id="soundIcon"></i> Audio Alerts: <span id="soundStatusText" style="color:#10b981; font-weight:700;">ON</span>
+      </button>
+      <button class="btn btn-outline" id="btnExportExecutiveReport" title="Generate Executive Operations PDF Summary">
+        <i data-lucide="file-down"></i> Executive Report
+      </button>
       <button class="btn btn-outline" id="btnOpenApiSettings" title="Configure AI API Key (Gemini / OpenAI)">
         <i data-lucide="key"></i> API Key
       </button>
@@ -261,9 +267,10 @@
             <div class="sim-speed-group">
               <button class="btn btn-primary btn-sm" id="btnAutoDrill"><i data-lucide="play"></i> Auto Drill</button>
               <select id="simSpeedSelect" class="form-select-sm">
-                <option value="1">1x Speed</option>
-                <option value="3" selected>3x Speed</option>
-                <option value="8">8x Speed</option>
+                <option value="1">1x Real-Time</option>
+                <option value="3" selected>3x Simulation</option>
+                <option value="8">8x Fast</option>
+                <option value="15">15x Accelerated</option>
               </select>
             </div>
           </div>
@@ -332,6 +339,35 @@
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+
+        <!-- Live eRTMAC WITSML Streaming Telemetry Log Table -->
+        <div class="card mt-3">
+          <div class="card-header">
+            <div class="card-title"><i data-lucide="radio"></i> Real-Time eRTMAC WITSML Sensor Telemetry Stream (Live Downhole Feed)</div>
+            <span class="badge badge-success"><span class="pulse-dot"></span> 10 Hz Streaming Channel Active</span>
+          </div>
+          <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+            <table class="data-table" id="witsmlStreamTable">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Depth (MD)</th>
+                  <th>ROP (m/hr)</th>
+                  <th>WOB (klbs)</th>
+                  <th>Torque (kft-lb)</th>
+                  <th>Flow (GPM)</th>
+                  <th>SPP (psi)</th>
+                  <th>Mud In / Out</th>
+                  <th>Gas Units</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="witsmlStreamTbody">
+                <!-- Live streaming rows added via app.js -->
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
@@ -653,6 +689,9 @@
             <h2>AI Multi-Modal Document & Report Ingestion Pipeline</h2>
             <p class="text-muted">Upload and parse legacy Well Completion Reports (WCR), Daily Drilling Reports (DDR), and Mud Logs via OCR, LayoutLM & LLM Structured Extraction.</p>
           </div>
+          <div class="pane-actions">
+            <button class="btn btn-primary btn-sm" id="btnOpenAddCustomWellModal"><i data-lucide="plus-circle"></i> Add Custom Offset Well</button>
+          </div>
         </div>
 
         <div class="ingestion-grid">
@@ -678,11 +717,14 @@
             </div>
           </div>
 
-          <!-- Extraction Output Visualizer -->
+          <!-- Extraction Output Visualizer with Categorized Views -->
           <div class="card output-card">
             <div class="card-header">
               <div class="card-title"><i data-lucide="check-circle"></i> Structured Knowledge Extracted by Pipeline</div>
-              <span class="badge badge-success">Schema: OIL_DRILLING_V2</span>
+              <div style="display:flex; gap:6px;">
+                <button class="btn btn-sm btn-outline active-tab-pill" id="btnViewJsonPayload">JSON Schema</button>
+                <button class="btn btn-sm btn-outline" id="btnViewParsedTables">Parsed Tables</button>
+              </div>
             </div>
             <div class="extraction-preview" id="extractionJsonPreview">
               <pre class="code-block"><code id="codeExtractionOutput">
@@ -692,11 +734,115 @@
 }
               </code></pre>
             </div>
+            <div class="parsed-tables-preview" id="parsedTablesPreview" style="display: none;">
+              <h4 style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">Extracted Formation Tops</h4>
+              <table class="data-table mb-3">
+                <thead><tr><th>Horizon</th><th>Top MD (m)</th><th>Top TVD (m)</th><th>Lithology</th></tr></thead>
+                <tbody id="tblExtractedTops">
+                  <tr><td>Girujan Clay</td><td>1,505.0</td><td>1,503.2</td><td>Shale / Siltstone</td></tr>
+                  <tr><td>Tipam Sandstone</td><td>2,110.0</td><td>2,107.8</td><td>Coarse Sandstone</td></tr>
+                  <tr><td>Barail Coal-Shale</td><td>2,740.0</td><td>2,736.5</td><td>Carbonaceous Shale</td></tr>
+                  <tr><td>Kopili Formation</td><td>3,390.0</td><td>3,385.1</td><td>Hard Calcareous Shale</td></tr>
+                </tbody>
+              </table>
+
+              <h4 style="font-size: 12px; color: var(--accent-cyan); margin-bottom: 6px;">Extracted Operational Incidents & Hazards</h4>
+              <table class="data-table">
+                <thead><tr><th>Depth</th><th>Hazard</th><th>Root Cause</th><th>Mitigation</th></tr></thead>
+                <tbody id="tblExtractedIncidents">
+                  <tr>
+                    <td>3,420m</td>
+                    <td><span class="badge badge-danger">Gas Influx / Kick</span></td>
+                    <td>Underbalanced drilling into Kopili localized gas lens</td>
+                    <td>Wait & Weight method; weighted up mud to 12.5 ppg</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
 
     </main>
+  </div>
+
+  <!-- Modal for Adding Custom Offset Well -->
+  <div class="modal-backdrop" id="addCustomWellModal" style="display: none;">
+    <div class="modal-dialog" style="width: 580px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="plus-circle"></i>
+          <h3>Add Custom Offset Well to WISDOM Database</h3>
+        </div>
+        <button class="btn-close" id="btnCloseCustomWellModal"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div class="control-group" style="flex-direction:column; align-items:flex-start;">
+            <label>Well Identifier:</label>
+            <input type="text" id="inpNewWellName" class="form-input" value="OIL-NHK-205" style="width:100%;">
+          </div>
+          <div class="control-group" style="flex-direction:column; align-items:flex-start;">
+            <label>Field / Block:</label>
+            <input type="text" id="inpNewWellField" class="form-input" value="Naharkatiya" style="width:100%;">
+          </div>
+          <div class="control-group" style="flex-direction:column; align-items:flex-start;">
+            <label>Latitude:</label>
+            <input type="number" step="0.0001" id="inpNewWellLat" class="form-input" value="27.3120" style="width:100%;">
+          </div>
+          <div class="control-group" style="flex-direction:column; align-items:flex-start;">
+            <label>Longitude:</label>
+            <input type="number" step="0.0001" id="inpNewWellLng" class="form-input" value="95.3380" style="width:100%;">
+          </div>
+          <div class="control-group" style="flex-direction:column; align-items:flex-start;">
+            <label>Total Depth (TD in meters):</label>
+            <input type="number" id="inpNewWellTD" class="form-input" value="3750" style="width:100%;">
+          </div>
+          <div class="control-group" style="flex-direction:column; align-items:flex-start;">
+            <label>Risk Level:</label>
+            <select id="inpNewWellRisk" class="form-select" style="width:100%;">
+              <option value="danger" selected>High Risk (Severe Loss / Stuck)</option>
+              <option value="warning">Moderate Risk</option>
+              <option value="normal">Normal History</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="control-group" style="flex-direction:column; align-items:flex-start; margin-bottom:12px;">
+          <label>Hazard Summary & Incident:</label>
+          <input type="text" id="inpNewWellHazard" class="form-input" value="Severe Mud Loss @ 2915m (60 bbls/hr in Barail Sand)" style="width:100%;">
+        </div>
+
+        <div class="control-group" style="flex-direction:column; align-items:flex-start; margin-bottom:16px;">
+          <label>Mitigation / Lesson Learned:</label>
+          <textarea id="inpNewWellMitigation" class="form-input" style="width:100%; height:60px;">Pumped 30 ppb CaCO3 + nut plug pill. Lowered mud weight to 11.6 ppg to cure losses.</textarea>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:8px;">
+          <button class="btn btn-outline btn-sm" id="btnCancelCustomWellModal">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="btnSaveCustomWell"><i data-lucide="check"></i> Add to Map & Repository</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal for Executive PDF/Operations Summary Report -->
+  <div class="modal-backdrop" id="executiveReportModal" style="display: none;">
+    <div class="modal-dialog" style="width: 820px;">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="file-text"></i>
+          <h3>WISDOM Executive Drilling Operations & Proactive Risk Brief</h3>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-sm btn-primary" id="btnPrintReport"><i data-lucide="printer"></i> Print / Save as PDF</button>
+          <button class="btn-close" id="btnCloseExecModal"><i data-lucide="x"></i></button>
+        </div>
+      </div>
+      <div class="modal-body" id="execReportPrintableContent">
+        <!-- Injected via app.js -->
+      </div>
+    </div>
   </div>
 
   <!-- Modal for API Key Settings -->

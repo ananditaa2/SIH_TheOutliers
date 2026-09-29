@@ -261,6 +261,12 @@ body.dark-theme {
   border-color: var(--text-secondary);
 }
 
+.btn-outline.active-tab-pill {
+  background-color: var(--accent-primary) !important;
+  color: #fff !important;
+  border-color: var(--accent-primary) !important;
+}
+
 .btn-sm {
   padding: 4px 10px;
   font-size: 11px;

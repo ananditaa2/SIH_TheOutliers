@@ -77,8 +77,39 @@ const STATE = {
   isAutoDrilling: false,
   autoDrillInterval: null,
   simSpeed: 3,
-  mitigationApplied: false
+  mitigationApplied: false,
+  soundAlertsEnabled: true,
+  audioContext: null
 };
+
+// ================= WEB AUDIO HAZARD BEEP SYNTHESIZER =================
+function playHazardAudioBeep() {
+  if (!STATE.soundAlertsEnabled) return;
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!STATE.audioContext) STATE.audioContext = new AudioCtx();
+    const ctx = STATE.audioContext;
+    if (ctx.state === "suspended") ctx.resume();
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime); // A5 note
+    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.25);
+
+    gain.gain.setValueAtTime(0.2, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.25);
+  } catch (e) {
+    console.log("Audio not allowed yet by user gesture", e);
+  }
+}
 
 // Rich Offset Well Dataset (Upper Assam Basin: Naharkatiya / Moran / Duliajan / Jorajan / Kusijan)
 let OFFSET_WELLS = [
@@ -396,9 +427,29 @@ document.addEventListener("DOMContentLoaded", () => {
   initParameterSandbox();
   initRagAssistant();
   initApiKeyModal();
+  initCustomWellModal();
+  initExecutiveReportModal();
   initNptIncidentTable();
   initIngestionSimulator();
   initArchModal();
+
+  // Audio Toggle Button
+  const soundBtn = document.getElementById("btnToggleSound");
+  const soundIcon = document.getElementById("soundIcon");
+  const soundText = document.getElementById("soundStatusText");
+  if (soundBtn) {
+    soundBtn.addEventListener("click", () => {
+      STATE.soundAlertsEnabled = !STATE.soundAlertsEnabled;
+      if (STATE.soundAlertsEnabled) {
+        soundText.textContent = "ON";
+        soundText.style.color = "#10b981";
+        playHazardAudioBeep();
+      } else {
+        soundText.textContent = "MUTED";
+        soundText.style.color = "#ef4444";
+      }
+    });
+  }
 
   // Reset Filters button
   document.getElementById("btnResetFilters")?.addEventListener("click", () => {
@@ -436,6 +487,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const wellName = STATE.selectedOffsetWell ? STATE.selectedOffsetWell.name : "OIL-NHK-108";
     window.sendPredefinedQuery(`Summarize all drilling hazards and successful mitigations from offset well ${wellName}`);
   });
+
+  // Populate initial WITSML telemetry rows
+  populateInitialWitsmlStream();
 });
 
 // ================= NAVIGATION HANDLER =================
@@ -942,6 +996,9 @@ function evaluateLookAheadAlerts(currentDepth) {
   if (activeAlertCount) activeAlertCount.textContent = windowAlerts.length;
   if (alertBadge) alertBadge.textContent = windowAlerts.length;
 
+  // Append live WITSML row for telemetry stream
+  appendLiveWitsmlRow(currentDepth, rop, (22.5 + Math.random()*2).toFixed(1), torque);
+
   // Critical Hazard Banner handling (when bit is within 40m of hazard)
   const criticalHazard = windowAlerts.find(a => Math.abs(a.depthDiff) <= 40);
   if (criticalHazard && !STATE.mitigationApplied) {
@@ -949,6 +1006,7 @@ function evaluateLookAheadAlerts(currentDepth) {
       hazardBanner.style.display = "flex";
       if (bannerTitle) bannerTitle.textContent = `CRITICAL HAZARD: Approaching ${criticalHazard.incident.type} Zone (@ ${criticalHazard.incident.depth}m)`;
       if (bannerDesc) bannerDesc.textContent = `Offset ${criticalHazard.wellName} (${criticalHazard.distKm} km) experienced: "${criticalHazard.incident.rootCause}"`;
+      playHazardAudioBeep();
     }
   } else {
     if (hazardBanner) hazardBanner.style.display = "none";
@@ -1712,6 +1770,28 @@ function initIngestionSimulator() {
     }, 500);
   }
 
+  // View Toggles: JSON Schema vs Parsed Tables
+  const btnJson = document.getElementById("btnViewJsonPayload");
+  const btnTables = document.getElementById("btnViewParsedTables");
+  const previewJson = document.getElementById("extractionJsonPreview");
+  const previewTables = document.getElementById("parsedTablesPreview");
+
+  if (btnJson && btnTables) {
+    btnJson.addEventListener("click", () => {
+      btnJson.classList.add("active-tab-pill");
+      btnTables.classList.remove("active-tab-pill");
+      if (previewJson) previewJson.style.display = "block";
+      if (previewTables) previewTables.style.display = "none";
+    });
+
+    btnTables.addEventListener("click", () => {
+      btnTables.classList.add("active-tab-pill");
+      btnJson.classList.remove("active-tab-pill");
+      if (previewJson) previewJson.style.display = "none";
+      if (previewTables) previewTables.style.display = "block";
+    });
+  }
+
   if (btn) {
     btn.addEventListener("click", () => triggerProcessing("WCR-OIL-NHK-124.pdf"));
   }
@@ -1743,69 +1823,234 @@ function initIngestionSimulator() {
   }
 }
 
-// ================= ARCHITECTURE MODAL =================
-function initArchModal() {
-  const btnOpen = document.getElementById("btnHelpWalkthrough");
-  const btnClose = document.getElementById("btnCloseArchModal");
-  const modal = document.getElementById("archModal");
-  const content = document.getElementById("archModalContent");
+// ================= WITSML TELEMETRY STREAM FEEDER =================
+function populateInitialWitsmlStream() {
+  const tbody = document.getElementById("witsmlStreamTbody");
+  if (!tbody) return;
+
+  const now = new Date();
+  const initialRows = [
+    { time: formatTimeOffset(now, -180), depth: 2830, rop: 15.4, wob: 21.8, torque: 15.6, flow: 485, spp: 2450, mud: "11.8 / 11.7", gas: "18 units", status: "Normal" },
+    { time: formatTimeOffset(now, -120), depth: 2835, rop: 14.8, wob: 22.0, torque: 16.2, flow: 480, spp: 2465, mud: "11.8 / 11.7", gas: "24 units", status: "Normal" },
+    { time: formatTimeOffset(now, -60), depth: 2840, rop: 14.4, wob: 22.4, torque: 16.5, flow: 480, spp: 2480, mud: "11.8 / 11.8", gas: "35 units", status: "Normal" },
+    { time: formatTimeOffset(now, 0), depth: 2845, rop: 14.2, wob: 22.5, torque: 16.8, flow: 480, spp: 2495, mud: "11.8 / 11.8", gas: "48 units", status: "Caution" }
+  ];
+
+  tbody.innerHTML = initialRows.map(r => `
+    <tr>
+      <td class="mono">${r.time}</td>
+      <td class="mono font-bold">${r.depth} m</td>
+      <td class="mono">${r.rop}</td>
+      <td class="mono">${r.wob}</td>
+      <td class="mono">${r.torque}</td>
+      <td class="mono">${r.flow}</td>
+      <td class="mono">${r.spp}</td>
+      <td class="mono">${r.mud}</td>
+      <td class="mono">${r.gas}</td>
+      <td><span class="badge ${r.status === 'Caution' ? 'badge-warning' : 'badge-success'}">${r.status}</span></td>
+    </tr>
+  `).join("");
+}
+
+function appendLiveWitsmlRow(depth, rop, wob, torque) {
+  const tbody = document.getElementById("witsmlStreamTbody");
+  if (!tbody) return;
+
+  const now = new Date();
+  const timeStr = now.toTimeString().split(" ")[0];
+  const isHazard = depth >= 2890 && depth <= 2930;
+  const gas = isHazard ? `${(75 + Math.random()*20).toFixed(0)} units` : `${(20 + Math.random()*15).toFixed(0)} units`;
+  const spp = isHazard ? 2620 : (2450 + Math.random()*40).toFixed(0);
+  const status = isHazard ? "HAZARD ZONE" : "DRILLING AHEAD";
+
+  const rowHtml = `
+    <tr style="${isHazard ? 'background:rgba(239,68,68,0.15);' : ''}">
+      <td class="mono">${timeStr}</td>
+      <td class="mono font-bold text-highlight">${depth} m</td>
+      <td class="mono">${rop}</td>
+      <td class="mono">${wob}</td>
+      <td class="mono">${torque}</td>
+      <td class="mono">${STATE.activeWell.flowRate}</td>
+      <td class="mono">${spp}</td>
+      <td class="mono">${STATE.activeWell.mudWeight} / ${(STATE.activeWell.mudWeight - 0.1).toFixed(1)}</td>
+      <td class="mono">${gas}</td>
+      <td><span class="badge ${isHazard ? 'badge-danger' : 'badge-success'}">${status}</span></td>
+    </tr>
+  `;
+
+  tbody.insertAdjacentHTML("afterbegin", rowHtml);
+  if (tbody.children.length > 25) {
+    tbody.removeChild(tbody.lastElementChild);
+  }
+}
+
+function formatTimeOffset(date, secondsOffset) {
+  const d = new Date(date.getTime() + secondsOffset * 1000);
+  return d.toTimeString().split(" ")[0];
+}
+
+// ================= CUSTOM WELL CREATOR MODAL =================
+function initCustomWellModal() {
+  const btnOpen = document.getElementById("btnOpenAddCustomWellModal");
+  const modal = document.getElementById("addCustomWellModal");
+  const btnClose = document.getElementById("btnCloseCustomWellModal");
+  const btnCancel = document.getElementById("btnCancelCustomWellModal");
+  const btnSave = document.getElementById("btnSaveCustomWell");
 
   if (!modal) return;
 
+  const closeModal = () => { modal.style.display = "none"; };
+  if (btnOpen) btnOpen.addEventListener("click", () => { modal.style.display = "flex"; lucide.createIcons(); });
+  if (btnClose) btnClose.addEventListener("click", closeModal);
+  if (btnCancel) btnCancel.addEventListener("click", closeModal);
+
+  if (btnSave) {
+    btnSave.addEventListener("click", () => {
+      const name = document.getElementById("inpNewWellName").value.trim();
+      const field = document.getElementById("inpNewWellField").value.trim();
+      const lat = parseFloat(document.getElementById("inpNewWellLat").value);
+      const lng = parseFloat(document.getElementById("inpNewWellLng").value);
+      const td = parseInt(document.getElementById("inpNewWellTD").value);
+      const risk = document.getElementById("inpNewWellRisk").value;
+      const hazard = document.getElementById("inpNewWellHazard").value.trim();
+      const mitigation = document.getElementById("inpNewWellMitigation").value.trim();
+
+      if (!name || isNaN(lat) || isNaN(lng)) {
+        alert("Please provide a valid Well Name, Latitude, and Longitude.");
+        return;
+      }
+
+      const newWell = {
+        id: name.replace(/[^a-zA-Z0-9]/g, "-"),
+        name: name,
+        field: field || "Naharkatiya",
+        lat: lat,
+        lng: lng,
+        distKm: 0,
+        td: td || 3700,
+        year: new Date().getFullYear(),
+        status: "Ingested Offset",
+        casingProgram: "20\"@150m, 13-3/8\"@1480m, 9-5/8\"@2750m",
+        mudWeightAvg: "11.6 - 12.0 ppg",
+        hazard: hazard,
+        riskLevel: risk,
+        formationTops: { Girujan: 1510, Tipam: 2120, Barail: 2750, Kopili: 3400 },
+        incidents: [
+          {
+            depth: 2915,
+            formation: "Barail Sandstone",
+            type: hazard.split(" @")[0] || "Severe Mud Loss",
+            lossRate: "60 bbls/hr",
+            nptHrs: 24,
+            rootCause: hazard,
+            mitigation: mitigation,
+            reportRef: `User-Ingested (${name})`
+          }
+        ]
+      };
+
+      OFFSET_WELLS.unshift(newWell);
+      recalculateOffsetDistances();
+      renderOffsetMarkers();
+      renderOffsetWellList();
+      initNptIncidentTable();
+
+      alert(`Well ${name} successfully ingested and added to WISDOM geospatial database!\nPlotted on map at (${lat}, ${lng}).`);
+      closeModal();
+      window.selectOffsetWell(newWell.id);
+    });
+  }
+
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal();
+  });
+}
+
+// ================= EXECUTIVE OPERATIONS REPORT BRIEF =================
+function initExecutiveReportModal() {
+  const btnOpen = document.getElementById("btnExportExecutiveReport");
+  const modal = document.getElementById("executiveReportModal");
+  const btnClose = document.getElementById("btnCloseExecModal");
+  const btnPrint = document.getElementById("btnPrintReport");
+  const container = document.getElementById("execReportPrintableContent");
+
+  if (!modal) return;
+
+  const closeModal = () => { modal.style.display = "none"; };
   if (btnOpen) {
     btnOpen.addEventListener("click", () => {
-      if (content) {
-        content.innerHTML = `
-          <div style="display:flex; flex-direction:column; gap:16px;">
-            <div style="background:rgba(2,132,199,0.1); border:1px solid #0284c7; padding:12px; border-radius:8px;">
-              <h4 style="color:#38bdf8; margin-bottom:4px;">Project Overview: WISDOM (Well Intelligence & Drilling Operations Memory)</h4>
-              <p>WISDOM connects real-time active drilling telemetry (eRTMAC) with institutional memory stored across decades of historical Well Completion Reports (WCRs), Daily Drilling Reports (DDRs), and offset well logs in the Upper Assam basin.</p>
-            </div>
+      const nearbyOffsets = getFilteredOffsetWells();
+      const topIncidents = [];
+      nearbyOffsets.forEach(w => w.incidents.forEach(i => topIncidents.push({ well: w.name, ...i })));
 
-            <h4 style="color:#fff;">Core Technological Pillars</h4>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-              <div style="background:var(--bg-surface); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
-                <strong style="color:#38bdf8;">1. Multi-Modal Ingestion & OCR Pipeline</strong>
-                <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">Extracts unstructured legacy drilling reports, mud logging sheets, and lithology tables into structured JSON schemas using PaddleOCR/Docling + LayoutLM + LLM Structured Extraction.</p>
+      if (container) {
+        container.innerHTML = `
+          <div style="font-family:sans-serif; color:#fff; line-height:1.6;">
+            <div style="border-bottom:2px solid #0284c7; padding-bottom:10px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
+              <div>
+                <h2 style="color:#38bdf8; font-size:18px; margin:0;">OIL INDIA LIMITED — DRILLING OPERATIONS BRIEF</h2>
+                <div style="font-size:12px; color:#94a3b8;">WISDOM: Well Intelligence & Drilling Operations Memory Platform</div>
               </div>
-              <div style="background:var(--bg-surface); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
-                <strong style="color:#38bdf8;">2. Geospatial Spatial Discovery Engine</strong>
-                <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">PostGIS spatial index enabling dynamic radius queries (<code>ST_DWithin</code>) to isolate relevant offset wells, fault blocks, and structural corridors.</p>
-              </div>
-              <div style="background:var(--bg-surface); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
-                <strong style="color:#38bdf8;">3. Stratigraphic Depth Correlation</strong>
-                <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">Dynamic TVD/MD alignment correlating active drilling bit depth with offset formation tops (Girujan, Tipam, Barail, Kopili, Eocene).</p>
-              </div>
-              <div style="background:var(--bg-surface); padding:12px; border-radius:6px; border:1px solid var(--border-color);">
-                <strong style="color:#38bdf8;">4. Proactive Look-Ahead Alerting & RAG</strong>
-                <p style="font-size:12px; color:var(--text-secondary); margin-top:4px;">Predictive ML models (Loss, Stuck Pipe, Kick) combined with a grounding RAG assistant providing immediate operational mitigation SOPs.</p>
+              <div style="text-align:right; font-size:11px; color:#94a3b8;">
+                Date: <strong>${new Date().toLocaleDateString()}</strong> | Status: <strong style="color:#10b981;">ACTIVE STREAM</strong>
               </div>
             </div>
 
-            <h4 style="color:#fff;">Full Tech Stack</h4>
-            <ul style="padding-left:20px; font-size:12px; color:var(--text-secondary);">
-              <li><strong>Frontend:</strong> Modern Vanilla JS/CSS Design System, Leaflet GIS, Chart.js, Lucide Icons (Can easily be wrapped in React/Vite/Next.js)</li>
-              <li><strong>Backend API:</strong> Python FastAPI / Uvicorn (Asynchronous REST & WebSocket streaming)</li>
-              <li><strong>Databases:</strong> PostgreSQL + PostGIS (Spatial indexing), TimescaleDB (eRTMAC time-series drilling logs), ChromaDB / Milvus (Vector embeddings)</li>
-              <li><strong>AI & NLP:</strong> LangChain / LlamaIndex, Gemini / OpenAI APIs, PaddleOCR / Tesseract, Scikit-learn & XGBoost</li>
-            </ul>
+            <h4 style="color:#38bdf8; font-size:14px; margin-bottom:6px;">1. Active Well Operational Snapshot</h4>
+            <table class="data-table mb-3">
+              <tr>
+                <td><strong>Rig / Well:</strong> ${STATE.activeWell.name}</td>
+                <td><strong>Field:</strong> ${STATE.activeWell.field}</td>
+                <td><strong>Current Depth:</strong> ${STATE.activeWell.currentDepthMD} m TVD</td>
+              </tr>
+              <tr>
+                <td><strong>Active Horizon:</strong> ${STATE.activeWell.currentFormation}</td>
+                <td><strong>Mud Density:</strong> ${STATE.activeWell.mudWeight} ppg (ECD: ${STATE.activeWell.ecd} ppg)</td>
+                <td><strong>ROP / Torque:</strong> ${STATE.activeWell.rop} m/hr / ${STATE.activeWell.torque} kft-lb</td>
+              </tr>
+            </table>
+
+            <h4 style="color:#38bdf8; font-size:14px; margin-bottom:6px;">2. Nearby Offset Well Correlated Hazards (Within ${STATE.queryRadiusKm} km Radius)</h4>
+            <table class="data-table mb-3">
+              <thead>
+                <tr><th>Offset Well</th><th>Distance</th><th>Hazard Depth</th><th>Failure Mode & Root Cause</th><th>Applied Mitigation</th></tr>
+              </thead>
+              <tbody>
+                ${topIncidents.slice(0, 4).map(inc => `
+                  <tr>
+                    <td><strong>${inc.well}</strong></td>
+                    <td>${inc.depth}m</td>
+                    <td><span class="badge badge-danger">${inc.type}</span></td>
+                    <td style="font-size:11px;">${inc.rootCause}</td>
+                    <td style="font-size:11px; color:#38bdf8;">${inc.mitigation}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+
+            <h4 style="color:#38bdf8; font-size:14px; margin-bottom:6px;">3. Look-Ahead Operational Recommendations Ahead of Bit</h4>
+            <div style="background:rgba(2,132,199,0.1); border:1px solid #0284c7; padding:12px; border-radius:6px; font-size:12px;">
+              <p>• <strong>Lost Circulation Mitigation:</strong> Pre-treat active mud with 25-30 ppb graded Calcium Carbonate prior to Barail coal seam penetration at 2,900m.</p>
+              <p>• <strong>Differential Sticking Prevention:</strong> Maintain string rotation &gt;80 RPM; restrict static survey time to under 2.5 minutes across permeable sand lenses.</p>
+              <p>• <strong>Casing Program Alignment:</strong> Set 9-5/8" intermediate shoe securely in Top Barail marker (2,750m - 2,780m) to isolate overlying Tipam water sands.</p>
+            </div>
           </div>
         `;
       }
+
       modal.style.display = "flex";
       lucide.createIcons();
     });
   }
 
-  if (btnClose) {
-    btnClose.addEventListener("click", () => {
-      modal.style.display = "none";
+  if (btnClose) btnClose.addEventListener("click", closeModal);
+  if (btnPrint) {
+    btnPrint.addEventListener("click", () => {
+      window.print();
     });
   }
 
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      modal.style.display = "none";
-    }
+    if (e.target === modal) closeModal();
   });
 }
