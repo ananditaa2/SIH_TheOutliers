@@ -543,6 +543,36 @@ body.dark-theme {
   z-index: 10;
 }
 
+/* Custom Leaflet Controls Dark Theme */
+.leaflet-control-layers {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border: 1px solid var(--border-highlight) !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: var(--shadow-md) !important;
+  font-family: var(--font-sans) !important;
+  font-size: 11px !important;
+  padding: 6px 10px !important;
+}
+
+.leaflet-control-layers-base label {
+  margin-bottom: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.leaflet-control-zoom a {
+  background: var(--bg-card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+.leaflet-control-zoom a:hover {
+  background: var(--bg-surface) !important;
+  color: var(--accent-cyan) !important;
+}
+
 .map-legend {
   display: flex;
   gap: 12px;

@@ -552,12 +552,33 @@ function initLeafletMap() {
   });
   window.leafletMapInstance = mapInstance;
 
-  // Dark mode tile layer (CartoDB Dark Matter)
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-    attribution: '&copy; <a href="https://carto.com/">CartoDB</a> | Oil India Limited NWIS',
-    maxZoom: 19,
-    subdomains: 'abcd'
-  }).addTo(mapInstance);
+  // 1. Dark Enterprise GIS Tile Layer (ArcGIS Canvas Dark Gray Base - 100% Free, No API Key Required)
+  const darkLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ | Oil India Limited NWIS',
+    maxZoom: 16
+  });
+
+  // 2. High-Res Satellite Imagery (Esri World Imagery - perfect for Oilfield drilling locations)
+  const satelliteLayer = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+    attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+    maxZoom: 18
+  });
+
+  // 3. OpenStreetMap Topo Standard
+  const osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    attribution: '&copy; OpenStreetMap contributors | Oil India Limited NWIS',
+    maxZoom: 19
+  });
+
+  // Add default dark layer
+  darkLayer.addTo(mapInstance);
+
+  // Add Layer Switcher Control
+  L.control.layers({
+    "🌙 Dark GIS (Default)": darkLayer,
+    "🛰️ Satellite Oilfield": satelliteLayer,
+    "🗺️ Standard Topo": osmLayer
+  }, null, { position: "topright" }).addTo(mapInstance);
 
   // Add Active Well Marker with custom glowing icon
   const activeIcon = L.divIcon({
