@@ -1,0 +1,4 @@
+# Ignore large local zips and node modules if any
+WISDOM_Project_Source.zip
+.DS_Store
+Thumbs.db

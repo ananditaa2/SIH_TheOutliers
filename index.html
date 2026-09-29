@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WISDOM | Well Intelligence & Drilling Operations Memory (OIL eRTMAC-NWIS)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- Leaflet CSS for Geospatial Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="dark-theme">
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="nav-left">
+      <div class="brand-logo">
+        <div class="logo-badge">WISDOM</div>
+        <div class="brand-titles">
+          <div class="app-title">WISDOM <span class="tag-live">LIVE v2.4</span></div>
+          <div class="app-subtitle">Well Intelligence & Drilling Operations Memory | Oil India Limited (eRTMAC-NWIS)</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Well Telemetry Ticker -->
+    <div class="telemetry-ticker">
+      <div class="telemetry-item">
+        <span class="lbl">ACTIVE WELL:</span>
+        <span class="val highlight" id="topActiveWellName">OIL-NHK-EXP-502</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="lbl">FIELD:</span>
+        <span class="val">Naharkatiya (Upper Assam)</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="lbl">CURRENT DEPTH (MD):</span>
+        <span class="val mono highlight" id="topLiveDepth">2,845 m</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="lbl">FORMATION:</span>
+        <span class="val" id="topFormation">Barail Sandstone</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="lbl">MUD WT:</span>
+        <span class="val mono" id="topMudWt">11.8 ppg</span>
+      </div>
+      <div class="telemetry-item">
+        <span class="lbl">ROP:</span>
+        <span class="val mono" id="topROP">14.2 m/hr</span>
+      </div>
+      <div class="telemetry-item status-pill online">
+        <span class="pulse-dot"></span> eRTMAC STREAM SYNCED
+      </div>
+    </div>
+
+    <div class="nav-right">
+      <button class="btn btn-outline" id="btnHelpWalkthrough" title="Project Architecture & Guide">
+        <i data-lucide="book-open"></i> Arch & Docs
+      </button>
+      <button class="btn btn-primary" id="btnTriggerScan">
+        <i data-lucide="radar"></i> Scan 5km Radius
+      </button>
+      <div class="user-avatar" title="Drilling Operations Lead">
+        <span>DO</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <div class="main-layout">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <nav class="sidebar-menu">
+        <button class="nav-btn active" data-tab="geospatial">
+          <i data-lucide="map-pin"></i>
+          <span>Geospatial Offset Map</span>
+          <span class="badge" id="offsetCountBadge">8</span>
+        </button>
+        <button class="nav-btn" data-tab="lookahead">
+          <i data-lucide="shield-alert"></i>
+          <span>Look-Ahead Depth Alerts</span>
+          <span class="badge badge-danger" id="alertCountBadge">2</span>
+        </button>
+        <button class="nav-btn" data-tab="correlation">
+          <i data-lucide="columns-3"></i>
+          <span>Stratigraphic Correlation</span>
+        </button>
+        <button class="nav-btn" data-tab="risk-analytics">
+          <i data-lucide="activity"></i>
+          <span>AI Predictive Risk Engine</span>
+        </button>
+        <button class="nav-btn" data-tab="ai-assistant">
+          <i data-lucide="sparkles"></i>
+          <span>Offset Knowledge RAG</span>
+        </button>
+        <button class="nav-btn" data-tab="incidents">
+          <i data-lucide="alert-triangle"></i>
+          <span>Historical NPT & Incidents</span>
+        </button>
+        <button class="nav-btn" data-tab="ingestion">
+          <i data-lucide="file-up"></i>
+          <span>OCR & Report Ingestion</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-status-box">
+          <div class="status-row">
+            <span class="text-muted"><i data-lucide="database"></i> Vector Index:</span>
+            <span class="text-success">Ready (1,480 Chunks)</span>
+          </div>
+          <div class="status-row">
+            <span class="text-muted"><i data-lucide="cpu"></i> ML Models:</span>
+            <span class="text-success">Loss / Stuck / Kick</span>
+          </div>
+          <div class="status-row">
+            <span class="text-muted"><i data-lucide="wifi"></i> eRTMAC Stream:</span>
+            <span class="text-success">Latency 240ms</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="content-view">
+      
+      <!-- ================= TAB 1: GEOSPATIAL MAP & OFFSET SELECTION ================= -->
+      <section id="tab-geospatial" class="tab-pane active">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>Geospatial Offset Wells Exploration</h2>
+            <p class="text-muted">Interactive spatial discovery around active target well with customizable query radius and multi-parameter filters.</p>
+          </div>
+          <div class="pane-actions">
+            <div class="control-group">
+              <label for="radiusSlider">Radius Filter: <strong id="radiusValue">5.0 km</strong></label>
+              <input type="range" id="radiusSlider" min="1" max="25" step="0.5" value="5">
+            </div>
+            <div class="control-group">
+              <label for="targetFormationFilter">Target Horizon:</label>
+              <select id="targetFormationFilter" class="form-select">
+                <option value="all">All Formations</option>
+                <option value="Barail" selected>Barail Coal-Shale / Sandstone</option>
+                <option value="Tipam">Tipam Sandstone</option>
+                <option value="Girujan">Girujan Clay</option>
+                <option value="Kopili">Kopili Formation</option>
+              </select>
+            </div>
+            <div class="control-group">
+              <label for="riskFilter">Risk Experience:</label>
+              <select id="riskFilter" class="form-select">
+                <option value="all">All Offset Wells</option>
+                <option value="severe_loss">Mud Loss Encountered</option>
+                <option value="stuck_pipe">Stuck Pipe / Fishing</option>
+                <option value="kick_gas">Gas Kick / Overpressure</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="geo-dashboard-grid">
+          <!-- Left: Leaflet Map Container -->
+          <div class="map-card card">
+            <div class="card-header map-header">
+              <div class="card-title"><i data-lucide="map"></i> Oil India Naharkatiya - Moran - Digboi Asset Map</div>
+              <div class="map-legend">
+                <span class="legend-item"><span class="dot dot-active"></span> Active Well</span>
+                <span class="legend-item"><span class="dot dot-danger"></span> High Risk Offset</span>
+                <span class="legend-item"><span class="dot dot-warning"></span> Moderate Risk</span>
+                <span class="legend-item"><span class="dot dot-normal"></span> Normal History</span>
+              </div>
+            </div>
+            <div id="leafletMap" class="map-view"></div>
+          </div>
+
+          <!-- Right: Selected Offset Wells Summary & Comparison Panel -->
+          <div class="offset-summary-card card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="layers"></i> Discovered Offset Wells (<span id="matchedCount">6</span> in range)</div>
+              <button class="btn btn-sm btn-outline" id="btnSelectAllOffsets">Compare Selected</button>
+            </div>
+            <div class="offset-well-list" id="offsetWellList">
+              <!-- Dynamically populated via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Detail Drawer for Selected Well -->
+        <div class="card offset-detail-bar" id="quickWellDetailCard">
+          <div class="detail-header">
+            <div class="detail-title">
+              <i data-lucide="info"></i>
+              <span id="detailWellTitle">Select an offset well on the map or list to inspect details</span>
+            </div>
+            <div class="detail-tags" id="detailWellBadges"></div>
+          </div>
+          <div class="detail-grid" id="detailWellBody">
+            <div class="detail-stat">
+              <span class="d-lbl">Total Depth (TD)</span>
+              <span class="d-val" id="detTD">-</span>
+            </div>
+            <div class="detail-stat">
+              <span class="d-lbl">Distance to Active</span>
+              <span class="d-val" id="detDist">-</span>
+            </div>
+            <div class="detail-stat">
+              <span class="d-lbl">Completion Year</span>
+              <span class="d-val" id="detYear">-</span>
+            </div>
+            <div class="detail-stat">
+              <span class="d-lbl">Major Hazard Encountered</span>
+              <span class="d-val highlight-danger" id="detHazard">-</span>
+            </div>
+            <div class="detail-stat">
+              <span class="d-lbl">Mud Weight Used</span>
+              <span class="d-val" id="detMud">-</span>
+            </div>
+            <div class="detail-stat">
+              <span class="d-lbl">Casing Program</span>
+              <span class="d-val" id="detCasing">-</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 2: LOOK-AHEAD DEPTH ALERTS & SIMULATOR ================= -->
+      <section id="tab-lookahead" class="tab-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>Look-Ahead Proactive Depth Alert Engine</h2>
+            <p class="text-muted">Simulates live drilling progression and generates predictive alerts when approaching depths/formations with historical offset failures.</p>
+          </div>
+          <div class="sim-controller-box">
+            <div class="sim-label"><i data-lucide="gauge"></i> <strong>eRTMAC Live Depth Controller:</strong></div>
+            <input type="range" id="liveDepthSlider" min="1500" max="3800" step="10" value="2845" class="depth-slider">
+            <div class="depth-readout">
+              <span class="depth-num" id="sliderDepthDisplay">2,845</span> <span class="depth-unit">m TVD</span>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btnAutoDrill"><i data-lucide="play"></i> Auto Drill Sim</button>
+          </div>
+        </div>
+
+        <div class="lookahead-grid">
+          <!-- Left Column: Active Alert Feed -->
+          <div class="card alert-feed-card">
+            <div class="card-header">
+              <div class="card-title text-danger"><i data-lucide="alert-octagon"></i> Proactive Look-Ahead Alerts (<span id="activeAlertCount">2</span> Triggered)</div>
+              <span class="pulse-indicator">LOOK-AHEAD WINDOW: ±150m</span>
+            </div>
+            <div class="alert-feed-list" id="lookaheadAlertFeed">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Middle & Right: Real-time Offset Encounter Heatmap & Parameter Advisory -->
+          <div class="card lookahead-strat-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="git-commit"></i> Current Depth Geological Horizon & Offset Risks</div>
+              <span class="badge" id="currentHorizonTag">Barail Sandstone (2,750m - 3,120m)</span>
+            </div>
+            <div class="horizon-breakdown">
+              <div class="lithology-ruler-container">
+                <div class="litho-marker current-pos" id="lithoCurrentDepthMarker" style="top: 55%;">
+                  <span class="marker-label">BIT @ 2,845m</span>
+                </div>
+                <div class="litho-section l-girujan" style="height: 20%;">
+                  <span>Girujan Clay (1,500 - 2,100m)</span>
+                </div>
+                <div class="litho-section l-tipam" style="height: 25%;">
+                  <span>Tipam Sandstone (2,100 - 2,750m)</span>
+                </div>
+                <div class="litho-section l-barail" style="height: 30%;">
+                  <span>Barail Coal-Shale / Main Sand (2,750 - 3,400m)</span>
+                </div>
+                <div class="litho-section l-kopili" style="height: 25%;">
+                  <span>Kopili Shale & Eocene Carb (3,400 - 4,000m)</span>
+                </div>
+              </div>
+
+              <div class="advisory-panel">
+                <h3><i data-lucide="clipboard-check"></i> Proactive Operational SOP & Mitigation Guidance</h3>
+                <div class="sop-content" id="sopContentContainer">
+                  <div class="sop-item warning">
+                    <div class="sop-head">
+                      <span class="sop-badge"><i data-lucide="shield-alert"></i> HIGH PRIORITY ADVISORY</span>
+                      <span class="sop-meta">Correlated with Offset Well NHK-108 & MOR-45</span>
+                    </div>
+                    <h4>Approaching Barail Coal Seam #3 (Expected @ 2,905m - 2,930m)</h4>
+                    <p>Historical wells within 4.2 km encountered sudden differential sticking & 85 bbls/hr partial mud loss at this exact subsea depth due to micro-fractures in intercalated coal-shale.</p>
+                    <div class="sop-checklist">
+                      <div class="check-item"><i data-lucide="check-circle-2"></i> Pre-treat active mud system with 25-30 ppb Fine/Medium LCM (Cellulose & CaCO3) before 2,880m.</div>
+                      <div class="check-item"><i data-lucide="check-circle-2"></i> Lower Mud Weight from 12.1 ppg to 11.7 ppg to prevent exceeding fracture gradient (12.4 ppg equiv).</div>
+                      <div class="check-item"><i data-lucide="check-circle-2"></i> Keep string rotation &gt; 90 RPM while making connections; avoid static standby &gt; 3 minutes.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="offset-historical-quotes">
+                  <h4><i data-lucide="history"></i> Relevant Excerpts from Offset Daily Drilling Reports (DDR)</h4>
+                  <div class="quote-box" id="historicalDdrQuotes">
+                    <div class="quote-item">
+                      <span class="quote-source">OIL-NHK-108 | DDR Day 44 (2,912m):</span>
+                      <p>"Observed sudden torque fluctuation (18 kft-lbs to 26 kft-lbs) and mud return drop from 450 gpm to 360 gpm. Pumped 40 bbls high-viscosity pill with mica & walnut shell. Regained full returns after 4 hrs."</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 3: STRATIGRAPHIC CORRELATION ================= -->
+      <section id="tab-correlation" class="tab-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>Cross-Well Stratigraphic & Log Correlation</h2>
+            <p class="text-muted">Side-by-side TVD/MD alignment of Active Well vs Offset Wells with Gamma Ray, Resistivity, Mud Weight, and Formation Tops.</p>
+          </div>
+          <div class="pane-actions">
+            <button class="btn btn-outline" id="btnExportCorrelation"><i data-lucide="download"></i> Export Correlation Panel</button>
+            <button class="btn btn-primary" id="btnToggleFacies"><i data-lucide="git-merge"></i> Auto-Align Formation Tops</button>
+          </div>
+        </div>
+
+        <div class="correlation-view-container card">
+          <div class="correlation-toolbar">
+            <div class="well-col-header active-col">
+              <span class="tag-active-well">ACTIVE WELL</span>
+              <h3>OIL-NHK-EXP-502</h3>
+              <p>Current: 2,845m | Target: 3,900m</p>
+            </div>
+            <div class="well-col-header offset-col">
+              <span class="tag-offset-well">OFFSET 1 (1.8 km NE)</span>
+              <h3>OIL-NHK-108</h3>
+              <p>TD: 3,650m | Completed 2021</p>
+            </div>
+            <div class="well-col-header offset-col">
+              <span class="tag-offset-well">OFFSET 2 (3.4 km W)</span>
+              <h3>OIL-NHK-087</h3>
+              <p>TD: 3,820m | Completed 2019</p>
+            </div>
+            <div class="well-col-header offset-col">
+              <span class="tag-offset-well">OFFSET 3 (4.9 km SE)</span>
+              <h3>OIL-MOR-45</h3>
+              <p>TD: 4,100m | Completed 2023</p>
+            </div>
+          </div>
+
+          <!-- Synthetic Well Correlation Chart -->
+          <div class="correlation-tracks-grid">
+            <!-- Active Well Track -->
+            <div class="well-track-box active-well-track">
+              <div class="track-header">GR (0-150 API) | Mud Wt (ppg)</div>
+              <canvas id="chartActiveWellTrack" height="420"></canvas>
+              <div class="formation-strip active-strip">
+                <div class="f-top top-girujan" style="top: 15%">Girujan Top: 1,520m</div>
+                <div class="f-top top-tipam" style="top: 38%">Tipam Sand: 2,130m</div>
+                <div class="f-top top-barail" style="top: 62%">Barail Top: 2,760m</div>
+                <div class="f-top top-bit" style="top: 68%"><strong>BIT @ 2,845m</strong></div>
+              </div>
+            </div>
+
+            <!-- Offset 1 Track -->
+            <div class="well-track-box">
+              <div class="track-header">GR | Resistivity | Incidents</div>
+              <canvas id="chartOffset1Track" height="420"></canvas>
+              <div class="formation-strip">
+                <div class="f-top top-girujan" style="top: 14%">Girujan: 1,510m</div>
+                <div class="f-top top-tipam" style="top: 37%">Tipam: 2,120m</div>
+                <div class="f-top top-barail" style="top: 61%">Barail: 2,755m</div>
+                <div class="f-incident inc-loss" style="top: 70%">Loss @ 2,912m</div>
+              </div>
+            </div>
+
+            <!-- Offset 2 Track -->
+            <div class="well-track-box">
+              <div class="track-header">GR | Resistivity | Incidents</div>
+              <canvas id="chartOffset2Track" height="420"></canvas>
+              <div class="formation-strip">
+                <div class="f-top top-girujan" style="top: 16%">Girujan: 1,540m</div>
+                <div class="f-top top-tipam" style="top: 40%">Tipam: 2,150m</div>
+                <div class="f-top top-barail" style="top: 64%">Barail: 2,780m</div>
+                <div class="f-incident inc-stuck" style="top: 74%">Stuck @ 3,040m</div>
+              </div>
+            </div>
+
+            <!-- Offset 3 Track -->
+            <div class="well-track-box">
+              <div class="track-header">GR | Resistivity | Incidents</div>
+              <canvas id="chartOffset3Track" height="420"></canvas>
+              <div class="formation-strip">
+                <div class="f-top top-girujan" style="top: 15%">Girujan: 1,515m</div>
+                <div class="f-top top-tipam" style="top: 39%">Tipam: 2,140m</div>
+                <div class="f-top top-barail" style="top: 63%">Barail: 2,770m</div>
+                <div class="f-incident inc-kick" style="top: 82%">Gas Kick @ 3,420m</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 4: AI PREDICTIVE RISK ENGINE ================= -->
+      <section id="tab-risk-analytics" class="tab-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>AI Predictive Risk Modeling & Offset Correlation Engine</h2>
+            <p class="text-muted">Machine learning ensemble models (XGBoost, Random Forest & Physics-Informed Geomechanical Regressors) trained on historical Assam Basin wells.</p>
+          </div>
+        </div>
+
+        <div class="risk-dashboard-grid">
+          <!-- Top Risk Metric Cards -->
+          <div class="metric-card card risk-critical">
+            <div class="m-head">
+              <span>MUD LOSS PROBABILITY</span>
+              <i data-lucide="droplet"></i>
+            </div>
+            <div class="m-val" id="lossRiskVal">78.4%</div>
+            <div class="m-sub text-danger"><i data-lucide="trending-up"></i> +32% in next 100m (Barail fracture zone)</div>
+            <div class="progress-bar-bg"><div class="progress-fill fill-danger" style="width: 78.4%"></div></div>
+          </div>
+
+          <div class="metric-card card risk-high">
+            <div class="m-head">
+              <span>DIFFERENTIAL STICKING INDEX</span>
+              <i data-lucide="anchor"></i>
+            </div>
+            <div class="m-val" id="stuckRiskVal">64.1%</div>
+            <div class="m-sub text-warning"><i data-lucide="alert-circle"></i> High Overbalance ΔP = 420 psi</div>
+            <div class="progress-bar-bg"><div class="progress-fill fill-warning" style="width: 64.1%"></div></div>
+          </div>
+
+          <div class="metric-card card risk-med">
+            <div class="m-head">
+              <span>GAS INFLUX / KICK RISK</span>
+              <i data-lucide="flame"></i>
+            </div>
+            <div class="m-val" id="kickRiskVal">29.0%</div>
+            <div class="m-sub text-success"><i data-lucide="check"></i> Formation Pore Pressure Normal</div>
+            <div class="progress-bar-bg"><div class="progress-fill fill-success" style="width: 29.0%"></div></div>
+          </div>
+
+          <div class="metric-card card risk-low">
+            <div class="m-head">
+              <span>WELLBORE INSTABILITY INDEX</span>
+              <i data-lucide="cpu"></i>
+            </div>
+            <div class="m-val" id="instabilityVal">41.5%</div>
+            <div class="m-sub text-muted">Bedding plane dip: 12° SE</div>
+            <div class="progress-bar-bg"><div class="progress-fill fill-info" style="width: 41.5%"></div></div>
+          </div>
+        </div>
+
+        <div class="charts-2col-grid">
+          <!-- Risk vs Depth Continuous Profile -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="line-chart"></i> Multi-Risk Profile vs Depth (1,500m to 4,000m)</div>
+              <span class="badge">Offset Weighted ML</span>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartRiskProfile"></canvas>
+            </div>
+          </div>
+
+          <!-- Parameter Distribution & Casing Recommendation -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="pie-chart"></i> Mud Weight & Casing Window vs Offset Pore/Fracture Gradient</div>
+            </div>
+            <div class="chart-container">
+              <canvas id="chartPoreFractureWindow"></canvas>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 5: AI KNOWLEDGE RAG ASSISTANT ================= -->
+      <section id="tab-ai-assistant" class="tab-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>Drilling Institutional Memory & Knowledge Assistant</h2>
+            <p class="text-muted">Semantic search and generative Q&A grounded in Oil India Well Completion Reports (WCR), Daily Drilling Reports (DDR), and Lessons Learned.</p>
+          </div>
+          <div class="pane-actions">
+            <span class="rag-status"><i data-lucide="check-check"></i> RAG Grounding: 100% Verifiable Citations</span>
+          </div>
+        </div>
+
+        <div class="ai-assistant-layout">
+          <!-- Chat / Query Interface -->
+          <div class="card chat-card">
+            <div class="card-header chat-header">
+              <div class="chat-bot-identity">
+                <div class="bot-avatar"><i data-lucide="bot"></i></div>
+                <div>
+                  <strong>WISDOM Knowledge Agent</strong>
+                  <div class="text-muted text-xs">Well Intelligence & Drilling Operations Memory | 450+ OIL historical wells indexed</div>
+                </div>
+              </div>
+              <div class="suggested-queries-dropdown">
+                <button class="btn btn-sm btn-outline" id="btnQuickPrompts"><i data-lucide="sparkles"></i> Preset Questions</button>
+              </div>
+            </div>
+
+            <div class="chat-messages" id="chatMessageContainer">
+              <!-- Initial Welcome Message -->
+              <div class="message-bubble bot-message">
+                <div class="msg-avatar"><i data-lucide="bot"></i></div>
+                <div class="msg-body">
+                  <p><strong>Hello Chief Drilling Engineer,</strong></p>
+                  <p>I am your Nearby Wells AI Assistant. I have indexed offset wells around your active well <code>OIL-NHK-EXP-502</code>. Ask me anything regarding:</p>
+                  <ul>
+                    <li>Past stuck pipe incidents and jar jarring parameters in Barail formation</li>
+                    <li>Successful LCM pills for total mud loss mitigation in Tipam sand</li>
+                    <li>Optimal casing setting depths and cement slurry formulations</li>
+                    <li>Kick tolerance and drill bit selection for Eocene limestone</li>
+                  </ul>
+                  <div class="quick-chips">
+                    <button class="chip" onclick="window.sendPredefinedQuery('What caused the stuck pipe in well NHK-087 at 3040m and how was it freed?')">Stuck Pipe in NHK-087 @ 3,040m</button>
+                    <button class="chip" onclick="window.sendPredefinedQuery('What is the recommended mud weight program for drilling 8-1/2 inch section in Barail coal sequence?')">Mud Weight for Barail 8-1/2" section</button>
+                    <button class="chip" onclick="window.sendPredefinedQuery('How did well MOR-45 handle severe mud loss in Barail Sandstone at 2910m?')">Mud Loss Solution in MOR-45</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="chat-input-area">
+              <input type="text" id="ragQueryInput" placeholder="Ask a drilling or offset well question (e.g. 'What LCM pill cured losses in NHK-108?')..." autocomplete="off">
+              <button class="btn btn-primary" id="btnSendRagQuery">
+                <i data-lucide="send"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Document References and Grounding Drawer -->
+          <div class="card citations-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="file-text"></i> Source Evidence & Extracted Passages</div>
+              <span class="badge" id="citationCountBadge">2 Docs Cited</span>
+            </div>
+            <div class="citation-list" id="citationListContainer">
+              <div class="citation-item">
+                <div class="cite-head">
+                  <span class="cite-doc"><i data-lucide="file-check"></i> WCR-OIL-NHK-108.pdf</span>
+                  <span class="cite-score">Match: 96.4%</span>
+                </div>
+                <div class="cite-section">Section 4.3: Mud Losses & Mitigations (Depth: 2,912m)</div>
+                <p class="cite-text">"Loss of returns observed at 2,912m MD while drilling 8-1/2" hole. Pumped 15 m3 high-viscosity pill with 35 ppb CaCO3 (Coarse) and 15 ppb Mica flakes. Allowed 2 hrs soak before resuming circulation."</p>
+              </div>
+
+              <div class="citation-item">
+                <div class="cite-head">
+                  <span class="cite-doc"><i data-lucide="file-check"></i> DDR-OIL-MOR-45-Day51.pdf</span>
+                  <span class="cite-score">Match: 92.1%</span>
+                </div>
+                <div class="cite-section">Operational Summary (Depth: 2,908m)</div>
+                <p class="cite-text">"Pre-treated mud system with nut-plug prior to penetrating Barail Coal-Shale horizon. Zero lost circulation observed compared to offset NHK-108."</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 6: HISTORICAL NPT & INCIDENTS MATRIX ================= -->
+      <section id="tab-incidents" class="tab-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>Historical NPT & Incident Matrix (Assam Asset)</h2>
+            <p class="text-muted">Structured repository of Non-Productive Time (NPT), stuck pipe incidents, well kicks, and fishing operations across offset wells.</p>
+          </div>
+          <div class="pane-actions">
+            <input type="text" id="incidentSearchInput" class="form-input" placeholder="Search by Well, Hazard, Depth...">
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="table-responsive">
+            <table class="data-table" id="incidentDataTable">
+              <thead>
+                <tr>
+                  <th>Well Name</th>
+                  <th>Distance</th>
+                  <th>Depth (m)</th>
+                  <th>Formation</th>
+                  <th>Incident Type</th>
+                  <th>NPT (Hrs)</th>
+                  <th>Root Cause</th>
+                  <th>Mitigation / Resolution</th>
+                  <th>Action Plan</th>
+                </tr>
+              </thead>
+              <tbody id="incidentTableBody">
+                <!-- Dynamically populated via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= TAB 7: OCR & REPORT INGESTION ================= -->
+      <section id="tab-ingestion" class="tab-pane">
+        <div class="pane-header">
+          <div class="pane-title-group">
+            <h2>AI-Powered Multi-Modal Document & Report Ingestion Pipeline</h2>
+            <p class="text-muted">Upload and parse legacy Well Completion Reports (WCR), Daily Drilling Reports (DDR), and Mud Logs via OCR, LayoutLM & LLM Structured Extraction.</p>
+          </div>
+        </div>
+
+        <div class="ingestion-grid">
+          <!-- Upload Dropzone -->
+          <div class="card upload-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="upload-cloud"></i> Ingest New Well Document / WCR / DDR</div>
+            </div>
+            <div class="dropzone" id="reportDropzone">
+              <i data-lucide="file-plus-2" class="dropzone-icon"></i>
+              <h3>Drag and drop drilling PDF or scanned image</h3>
+              <p class="text-muted">Supports scanned WCRs, LAS logs, DDR Excel files, and Geological reports (PDF, TIFF, LAS, XLSX)</p>
+              <button class="btn btn-outline btn-sm mt-3" id="btnSimulateUpload"><i data-lucide="file"></i> Load Sample WCR (OIL-NHK-124)</button>
+            </div>
+            <div class="pipeline-progress" id="ingestionProgressBox" style="display:none;">
+              <div class="progress-step-title" id="progressStepTitle">Extracting Layout & OCR Text...</div>
+              <div class="progress-bar-bg"><div class="progress-fill fill-primary" id="ingestProgressBar" style="width: 20%"></div></div>
+            </div>
+          </div>
+
+          <!-- Extraction Output Visualizer -->
+          <div class="card output-card">
+            <div class="card-header">
+              <div class="card-title"><i data-lucide="check-circle"></i> Structured Knowledge Extracted by Pipeline</div>
+              <span class="badge badge-success">Schema: OIL_DRILLING_V2</span>
+            </div>
+            <div class="extraction-preview" id="extractionJsonPreview">
+              <pre class="code-block"><code id="codeExtractionOutput">
+{
+  "well_header": {
+    "well_name": "OIL-NHK-108",
+    "field": "Naharkatiya",
+    "spud_date": "2021-03-15",
+    "rig": "OIL-RIG-08",
+    "total_depth_md": 3650.0,
+    "total_depth_tvd": 3648.2
+  },
+  "casing_records": [
+    { "casing_size": "20\"", "depth": 150.0, "cement_top": "Surface" },
+    { "casing_size": "13-3/8\"", "depth": 1480.0, "cement_top": "Surface" },
+    { "casing_size": "9-5/8\"", "depth": 2750.0, "cement_top": "1200m" }
+  ],
+  "extracted_incidents": [
+    {
+      "depth_md": 2912.0,
+      "formation": "Barail Sandstone",
+      "hazard_type": "Severe Mud Loss",
+      "loss_rate": "85 bbls/hr",
+      "root_cause": "Micro-fractured sandstone near coal seam contact",
+      "mitigation_applied": "35 ppb CaCO3 + 15 ppb Mica flake pill, 2 hr soak"
+    }
+  ],
+  "formation_tops": [
+    { "formation": "Girujan", "top_md": 1510.0 },
+    { "formation": "Tipam", "top_md": 2120.0 },
+    { "formation": "Barail", "top_md": 2755.0 },
+    { "formation": "Kopili", "top_md": 3410.0 }
+  ]
+}
+              </code></pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Modal for Project Architecture & Implementation Blueprint -->
+  <div class="modal-backdrop" id="archModal" style="display: none;">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="cpu"></i>
+          <h3>WISDOM: Well Intelligence & Drilling Operations Memory — Architecture & Specs</h3>
+        </div>
+        <button class="btn-close" id="btnCloseArchModal"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body" id="archModalContent">
+        <!-- Injected via app.js with comprehensive project breakdown -->
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
